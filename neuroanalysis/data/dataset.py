@@ -76,7 +76,7 @@ class Container(object):
         return path[::-1]
 
 
-class Experiment(Container):
+class DataSet(Container):
     """A generic container for RecordingSequence and SyncRecording instances that
     were acquired together.
     
