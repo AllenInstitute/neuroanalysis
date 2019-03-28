@@ -1,7 +1,7 @@
 from __future__ import print_function, division
 import numpy as np
 
-from .constants import ALL_CRE_TYPES, ALL_LABELS, EXCITATORY_CRE_TYPES, INHIBITORY_CRE_TYPES
+from multipatch_analysis.constants import ALL_CRE_TYPES, ALL_LABELS, EXCITATORY_CRE_TYPES, INHIBITORY_CRE_TYPES
 
 
 class Cell(object):
@@ -28,6 +28,12 @@ class Cell(object):
         self.position = None
         self._target_layer = None
         self._is_excitatory = None
+        self.has_readout = None ## should be set to True if we can have info about this cells postsynaptic activity, False if we don't
+        self.has_stimulation = None ## should be set to True if we can have info about this cells presynaptic activity, False if we don't
+                                    ## examples:
+                                    ##      patched cell:           has_readout = True, has_stimulation = True
+                                    ##      photostimulated cell:   has_readout = False, has_stimulation = True
+                                    ##      VSD imaged cell:        has_readout = True, has_stimulation = True ## even though we may not be stimulating, we have informationa about the presynaptic activity
 
     @property
     def pass_qc(self):
@@ -151,4 +157,4 @@ class Cell(object):
         return ((p1[0]-p2[0])**2 + (p1[1]-p2[1])**2 + (p1[2]-p2[2])**2)**0.5
 
     def __repr__(self):
-        return "<Cell %s:%d>" % (self.expt.source_id, self.cell_id)
+        return "<Cell %s:%s>" % (self.expt.source_id, str(self.cell_id))

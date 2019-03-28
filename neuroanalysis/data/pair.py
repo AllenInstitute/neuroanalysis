@@ -14,16 +14,20 @@ class Pair(object):
         self.preCell = preCell
         self.postCell = postCell
 
-    def wasProbed(self):
-        """Return True if the connection from self.preCell -> self.postCell was 
-        tested for connectivity"""
+        self._probed = None
+        self._connection_call = None 
 
-    def isConnected(self):
-        """Return True if the two cells are connected by either a synapse or a gap junction."""
-        return self.isSynapse() or self.isGapJunction()
 
-    def isSynapse(self):
-        """Return True if there is a synapse between preCell and postCell."""
+    # def wasProbed(self):
+    #     """Return True if the connection from self.preCell -> self.postCell was 
+    #     tested for connectivity"""
 
-    def isGapJunction(self):
-        """Return True if there is a gap junction between preCell and postCell."""
+    # def isConnected(self):
+    #     """Return True if the two cells are connected by either a synapse or a gap junction."""
+    #     return self.isSynapse() or self.isGapJunction()
+
+    # def isSynapse(self):
+    #     """Return True if there is a synapse between preCell and postCell."""
+
+    # def isGapJunction(self):
+    #     """Return True if there is a gap junction between preCell and postCell."""
