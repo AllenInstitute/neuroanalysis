@@ -30,7 +30,7 @@ def load_from_file(expt, file_path):
 
 def process_meta_info(expt, meta_info):
     """Process optional meta_info dict that is passed in at the initialization of expt.
-    Called after load_from_file."""
+    Called after load_from_file. Can have any format."""
 
 def get_uid(expt):
     """Optional - Return a unique id for the experiment. 

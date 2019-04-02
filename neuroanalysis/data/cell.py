@@ -28,6 +28,7 @@ class Cell(object):
         self.position = None
         self._target_layer = None
         self._is_excitatory = None
+        self._cre_type = None
         self.has_readout = None ## should be set to True if we can have info about this cells postsynaptic activity, False if we don't
         self.has_stimulation = None ## should be set to True if we can have info about this cells presynaptic activity, False if we don't
                                     ## examples:
@@ -79,6 +80,12 @@ class Cell(object):
 
     @property
     def cre_type(self):
+        if self._cre_type is None:
+            return self.deduce_cre_type()
+        else:
+            return self._cre_type
+
+    def deduce_cre_type(self):
         """Cre type string for this cell.
         
         If the cell is positive for multiple cre types, then they will be returned

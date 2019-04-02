@@ -801,7 +801,7 @@ class Experiment(object):
     @property
     def expt_info(self):
         if self._expt_info is None:
-            self._expt_info = self.library.get_expt_info(expt)
+            self._expt_info = self.library.get_expt_info(self)
             #index = os.path.join(self.expt_path, '.index')
             #if not os.path.isfile(index):
             #    raise TypeError("Cannot find index file (%s) for experiment %s" % (index, self))

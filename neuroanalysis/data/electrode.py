@@ -25,3 +25,8 @@ class Electrode(object):
         self.device_id = device_id
         self.patch_status = patch_status
         self.cell = None
+        self._internal_solution = None
+
+    @property
+    def internal_solution(self):
+        return self._internal_solution
