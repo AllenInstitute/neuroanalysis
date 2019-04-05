@@ -81,8 +81,8 @@ def process_meta_info(expt, meta_info):
             dist = [e for e in meta_info['distances'] if e['headstage']==n]
             if len(dist) > 1:
                 raise Exception('Something is wrong.')
-            cell.distance_to_pia = dist[0]['toPia']*1e-6
-            cell.distance_to_WM = dist[0]['toWM']*1e-6
+            cell.distance_to_pia = float(dist[0]['toPia'])*1e-6
+            cell.distance_to_WM = float(dist[0]['toWM'])*1e-6
 
 
     for i, cell in expt.cells.items():
@@ -90,7 +90,7 @@ def process_meta_info(expt, meta_info):
             cell._cre_type = meta_info['presynapticCre']
             label_cell(cell, preEffector, positive=True) ## assume all non-patched stimulated cells are positive for preEffector
 
-    expt.expt_info
+    expt.expt_info ## just have to touch it 
     expt.expt_info['internal_solution'] = meta_info['internal'] 
 
 
@@ -146,10 +146,12 @@ def load_markPoints_connection_file(expt, exp_json):
         cell.has_readout = True
         cell.has_stimulation = True ## it's possible to interogate patched cell pairs, even if that's not employed often
         expt._cells[cell.cell_id]=cell
-        for p, conn in data['Connections'].items():
-            if conn is None: ## skip this one, it doesn't have a match in points and is a duplicate
-                continue
-            points[p][headstage] = conn
+        #for p, conn in data['Connections'].items():
+        #    if conn is None: ## skip this one, it doesn't have a match in points and is a duplicate
+        #        continue
+        #    points[p][headstage] = conn
+        for p in points.keys():
+            points[p][headstage] = data['Connections'][p]
 
 
 
@@ -184,10 +186,12 @@ def load_markPoints_connection_file(expt, exp_json):
     # for point in points:
     #     for hs in HS_keys:
     #         expt.pairs[(point, hs)]._connection_call = point[hs]
-    for p in expt.pairs.values():
-        if p.preCell.cell_id in points:
-            if p.postCell.cell_id in HS_keys:
-                p._connection_call = points[p.preCell.cell_id][p.postCell.cell_id]
+    # for p in expt.pairs.values():
+    #     if p.preCell.cell_id in points:
+    #         if p.postCell.cell_id in HS_keys:
+    #             p._connection_call = points[p.preCell.cell_id][p.postCell.cell_id]
+
+    populate_connection_calls(expt, exp_json)
 
 
 def load_mosaiceditor_connection_file(expt, exp_json):
@@ -211,13 +215,23 @@ def load_mosaiceditor_connection_file(expt, exp_json):
         cell.has_stimulation = True
         expt._cells[cell.cell_id] = cell
 
-    ## populate pair values
+
+    # ## populate pair values
+    # for p in expt.pairs.values():
+    #     try:
+    #         p.connection_call = exp_json['Headstages'][p.postCell.cell_id]['Connections'][p.preCell.cell_id]
+    #     except KeyError:
+    #         print("Could not find connection call for Pair %s -> %s in experiment %s" % (p.preCell.cell_id, p.postCell.cell_id, expt.uid))
+
+    populate_connection_calls(expt, exp_json)
+
+
+def populate_connection_calls(expt, exp_json):
     for p in expt.pairs.values():
         try:
             p.connection_call = exp_json['Headstages'][p.postCell.cell_id]['Connections'][p.preCell.cell_id]
         except KeyError:
             print("Could not find connection call for Pair %s -> %s in experiment %s" % (p.preCell.cell_id, p.postCell.cell_id, expt.uid))
-
 
 
             
