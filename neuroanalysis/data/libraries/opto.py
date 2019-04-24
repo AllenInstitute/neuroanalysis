@@ -230,7 +230,9 @@ def populate_connection_calls(expt, exp_json):
     for p in expt.pairs.values():
         try:
             p.connection_call = exp_json['Headstages'][p.postCell.cell_id]['Connections'][p.preCell.cell_id]
+            p._probed = True
         except KeyError:
+            p._probed = False
             print("Could not find connection call for Pair %s -> %s in experiment %s" % (p.preCell.cell_id, p.postCell.cell_id, expt.uid))
 
 

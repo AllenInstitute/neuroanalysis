@@ -18,9 +18,13 @@ class Pair(object):
         self._connection_call = None 
 
 
-    # def wasProbed(self):
-    #     """Return True if the connection from self.preCell -> self.postCell was 
-    #     tested for connectivity"""
+    def was_probed(self):
+        """Return True if the connection from self.preCell -> self.postCell was 
+        tested for connectivity"""
+        if self._probed is None:
+            return False
+        else:
+            return self._probed
 
     # def isConnected(self):
     #     """Return True if the two cells are connected by either a synapse or a gap junction."""
