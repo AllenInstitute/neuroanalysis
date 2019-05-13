@@ -1,43 +1,120 @@
 import json
-import math
-import os.path
+import math, glob
+import os
 from collections import OrderedDict
 from neuroanalysis.data.cell import Cell
 from neuroanalysis.data.electrode import Electrode
 import pyqtgraph as pg
+from multipatch_analysis.util import timestamp_to_datetime
+from multipatch_analysis import config
 
-def get_cells(expt):
-    """Return a dictionary of {cell_id:Cell(), ...} for all cells in experiment."""
+#def get_cells(expt):
+#    """Return a dictionary of {cell_id:Cell(), ...} for all cells in experiment."""
 
-def get_region(expt):
-    """Return the region of the brain that the experiment took place in, ie. V1, A1, etc."""
+#def get_region(expt):
+#    """Return the region of the brain that the experiment took place in, ie. V1, A1, etc."""
+def path(expt):
+    return os.path.join(config.synphys_data, expt._site_path)
 
 def get_site_info(expt):
     """Return a dict with info from the .index file for the site of this experiment.
         Must include:
             __timestamp__   The timestamp of when this experiment started."""
+    index = os.path.join(expt.path, '.index')
+    if not os.path.isfile(index):
+        return None
+    return pg.configfile.readConfigFile(index)['.']
     ### TODO: define what is expected here for non-acq4 users
 
 def get_slice_info(expt):
     """Return a dict with info from the .index file for this experiment's slice."""
-    ### TODO: define what is expected here for non-acq4 users
+    index = os.path.join(os.path.split(expt.path)[0], '.index')
+    if not os.path.isfile(index):
+        return None
+    return pg.configfile.readConfigFile(index)['.']
 
-#def get_slice_directory(expt):
-#    """Return a path to the directory of the slice."""
-#    ### This makes an assumption that there is a directory for the slice. This seems like an acq4 specific assumption
+
+def get_slice_directory(expt):
+    """Return a path to the directory of the slice."""
+    ### This makes an assumption that there is a directory for the slice. This seems like an acq4 specific assumption
+    return os.path.split(expt.path)[0]
 
 def get_expt_info(expt):
     """Return a dict with info from the .index file for this experiment."""
-    if expt._site_path is not None:
-        index = os.path.join(self.expt_path, '.index')
+    if expt._expt_info is None:
+        expt_path = os.path.split(os.path.split(expt.path)[0])[0]
+        index = os.path.join(expt_path, '.index')
         if not os.path.isfile(index):
-            raise TypeError("Cannot find index file (%s) for experiment %s" % (index, self))
+            raise TypeError("Cannot find index file (%s) for experiment %s" % (index, expt))
         info = pg.configfile.readConfigFile(index)['.']
-        info.update(expt._expt_info)
         expt._expt_info = info
-    else:
-        expt._expt_info = {}
     return expt._expt_info
+
+def last_modification_time(expt):
+    """The timestamp of the most recently modified file in the experiment.
+    """
+    files = [
+        expt.path,
+        expt.pipette_file,
+        expt.nwb_file,
+        expt.mosaic_file,
+        os.path.join(expt.path, '.index'),
+        os.path.join(os.path.split(expt.path)[0], '.index'), ## slice path
+        os.path.join(os.path.split(os.path.split(expt.path)[0])[0], '.index'), ## expt_path
+    ]
+    mtime = 0
+    for f in files:
+        if f is None or not os.path.exists(f):
+            continue
+        mtime = max(mtime, os.stat(f).st_mtime)
+    
+    return timestamp_to_datetime(mtime)
+
+def pipette_file(expt):
+    """Return a pipettes.yml file for expt (or None)."""
+    pf = os.path.join(expt.path, 'pipettes.yml')
+    if not os.path.isfile(pf):
+        return None
+    return pf
+
+
+def get_ephys_file(expt):
+    """Return the ephys file for this experiment."""
+    p = expt.path
+    files = glob.glob(os.path.join(p, '*.nwb'))
+    if len(files) == 0:
+        files = glob.glob(os.path.join(p, '*.NWB'))
+    if len(files) == 0:
+        return None
+    elif len(files) > 1:
+        ephys_file = None
+        # multiple NWB files here; try using the file manifest to resolve.
+        manifest = os.path.join(p, 'file_manifest.yml')
+        if os.path.isfile(manifest):
+            manifest = yaml.load(open(manifest, 'rb'))
+            for f in manifest:
+                if f['category'] == 'MIES physiology':
+                    ephys_file = os.path.join(os.path.dirname(self.path), f['path'])
+                    break
+        if ephys_file is None:
+            raise Exception("Multiple NWB files found for %s" % expt)
+    else:
+        ephys_file = files[0]
+    return ephys_file
+
+def get_mosaic_file(expt):
+    sitefile = os.path.join(expt.path, "site.mosaic")
+    if not os.path.isfile(sitefile):
+        sitefile = os.path.join(os.path.split(expt.path)[0], "site.mosaic")
+    if not os.path.isfile(sitefile):
+        mosaicfiles = [f for f in os.listdir(expt.path) if f.endswith('.mosaic')]
+        if len(mosaicfiles) == 1:
+            sitefile = os.path.join(expt.path, mosaicfiles[0])
+    if not os.path.isfile(sitefile):
+        # print(os.listdir(self.path))
+        # print(os.listdir(os.path.split(self.path)[0]))
+        return None
+    return sitefile
 
 def load_from_file(expt, file_path):
     """First function that is called during expt initialization. Load information from the file at file_path
@@ -52,7 +129,7 @@ def load_from_file(expt, file_path):
     expt._uid=filename[0:-17]
     expt.source_id = (filename, None)
 
-    with open(filename,'r') as f:
+    with open(file_path,'r') as f:
         exp_json=json.load(f)
     version = exp_json.get('version', None)
 
@@ -61,24 +138,33 @@ def load_from_file(expt, file_path):
     else:
         load_mosaiceditor_connection_file(expt, exp_json)
 
+def load_from_site_path(expt, site_path):
+    cnx_file = get_connections_file(expt.path)
+    #print("attempting to load ", cnx_file)
+    load_from_file(expt, cnx_file)
+
+    
+
+
+
 
 def process_meta_info(expt, meta_info):
     """Process optional meta_info dict that is passed in at the initialization of expt.
     Called after load_from_file."""
     ## Need to load: presynapticCre, presynapticEffector, [class, reporter, layer for each headstage], internal
 
-    preEffector = meta_info['presynapticEffector']
+    preEffector = meta_info.get('presynapticEffector')
     for e_id, elec in expt.electrodes.items():
         n = e_id[-1]
         cell = elec.cell
-        cell._morphology['initial_call'] = meta_info['HS%s_class'%n]
-        cell._target_layer = meta_info['HS%s_layer'%n]
-        if meta_info['HS%s_reporter'%n] == 'positive':
-            cell._cre_type = meta_info['presynapticCre']
-        label_cell(cell, preEffector, meta_info['HS%s_reporter'%n] == 'positive')
-        elec._internal_solution = meta_info['internal']
-        if len(meta_info['distances']) > 0: ### we may not have distance measurements for all cells
-            dist = [e for e in meta_info['distances'] if e['headstage']==n]
+        cell._morphology['initial_call'] = meta_info.get('HS%s_class'%n)
+        cell._target_layer = meta_info.get('HS%s_layer'%n)
+        if meta_info.get('HS%s_reporter'%n) == 'positive':
+            cell._cre_type = meta_info.get('presynapticCre')
+        label_cell(cell, preEffector, meta_info.get('HS%s_reporter'%n) == 'positive')
+        elec._internal_solution = meta_info.get('internal')
+        if len(meta_info.get('distances')) > 0: ### we may not have distance measurements for all cells
+            dist = [e for e in meta_info.get('distances') if e.get('headstage')==n]
             if len(dist) > 1:
                 raise Exception('Something is wrong.')
             cell.distance_to_pia = float(dist[0]['toPia'])*1e-6
@@ -87,11 +173,11 @@ def process_meta_info(expt, meta_info):
 
     for i, cell in expt.cells.items():
         if not cell.has_readout and cell.has_stimulation:
-            cell._cre_type = meta_info['presynapticCre']
+            cell._cre_type = meta_info.get('presynapticCre')
             label_cell(cell, preEffector, positive=True) ## assume all non-patched stimulated cells are positive for preEffector
 
     expt.expt_info ## just have to touch it 
-    expt.expt_info['internal_solution'] = meta_info['internal'] 
+    expt.expt_info['internal_solution'] = meta_info.get('internal') 
 
 
 
@@ -233,9 +319,18 @@ def populate_connection_calls(expt, exp_json):
             p._probed = True
         except KeyError:
             p._probed = False
-            print("Could not find connection call for Pair %s -> %s in experiment %s" % (p.preCell.cell_id, p.postCell.cell_id, expt.uid))
+            #print("Could not find connection call for Pair %s -> %s in experiment %s" % (p.preCell.cell_id, p.postCell.cell_id, expt.uid))
 
 
+def get_connections_file(site_path):
+    cnx_files = sorted(glob.glob(os.path.join(site_path, '*connections*.json')))
+    print('cnx_files:', cnx_files, "path:", site_path)
+    if len(cnx_files) == 1:
+        return cnx_files[0]
+    elif len(cnx_files) == 0:
+        raise Exception("Could not find a connections file.")
+    else:
+        raise Exception("Need to implement choosing which file to load. Options are %s" %str(cnx_files))
             
     
 

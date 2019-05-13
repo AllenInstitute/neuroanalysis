@@ -30,8 +30,15 @@ class Pair(object):
     #     """Return True if the two cells are connected by either a synapse or a gap junction."""
     #     return self.isSynapse() or self.isGapJunction()
 
-    # def isSynapse(self):
-    #     """Return True if there is a synapse between preCell and postCell."""
+    def isSynapse(self):
+        """Return True if there is a synapse between preCell and postCell."""
+        if self._connection_call == 'excitatory' or self._connection_call == 'inhibitory':
+            return True
+        else:
+            return False
 
     # def isGapJunction(self):
     #     """Return True if there is a gap junction between preCell and postCell."""
+    @property
+    def distance(self):
+        return self.preCell.distance(self.postCell)

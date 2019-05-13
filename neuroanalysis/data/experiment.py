@@ -24,7 +24,7 @@ class Experiment(object):
             meta_info = {}
 
         self.entry = None
-        #self.source_id = (None, None)
+        self.source_id = (None, None)
         self.electrodes = None
         self._cells = None
         self._pairs = None
@@ -40,8 +40,9 @@ class Experiment(object):
         self._site_path = site_path
         self._probed = None
         #self._sweep_summary = None
-        #self._mosaic_file = None
+        self._mosaic_file = None
         #self._nwb_file = None ## name should change
+        self._ephys_file = None
         #self._data = None
         #self._stim_list = None
         #self._genotype = None
@@ -51,18 +52,24 @@ class Experiment(object):
         self._rig_name = None
         self._uid = None
 
-        if site_path is None:
+        if site_path is not None:
+            self.load_from_site_path(site_path)
+        elif load_file is not None:
             self.load_from_file(load_file)
         else:
-            self.load_from_site_path(site_path)
+            raise Exception("Not sure how to load experiment, neither load_file or site_path were specified.")
 
-        self.process_meta_info(meta_info)
+        if meta_info is not None:
+            self.process_meta_info(meta_info)
 
     def load_from_file(self, load_file_path):
         """Initialize this Experiment from the given file. Should populate:
 
         """
         self.library.load_from_file(self, load_file_path)
+
+    def load_from_site_path(self, path):
+        self.library.load_from_site_path(self, path)
 
     def process_meta_info(self, meta_info):
         """Process an optional meta_info dictionary that is passed in upon
@@ -78,10 +85,10 @@ class Experiment(object):
         """
         if self._uid is None:
             uid = self.library.get_uid(self)
-            if uid is not None:
+            if uid is not None and uid != '':
                 self._uid =  uid
             else:
-                self._uid = '%0.2f' % (self.site_info['__timestamp__'])
+                self._uid = '%0.3f' % (self.site_info['__timestamp__'])
         return self._uid
     
     @property
@@ -186,6 +193,12 @@ class Experiment(object):
             self._sweep_summary = sweeps
         return self._sweep_summary
 
+    @property
+    def last_modification_time(self):
+        """The timestamp of the most recently modified file in this experiment.
+        """
+        return self.library.last_modification_time(self)
+
     # def list_stims(self):
     #     """Open NWB file and return a list of stim set names.
     #     """
@@ -249,119 +262,119 @@ class Experiment(object):
 
 
 
-    def _load_yml(self, yml_file):
-        """Load experiment information from a pipettes.yml file.
+    # def _load_yml(self, yml_file):
+    #     """Load experiment information from a pipettes.yml file.
 
-        Sets several properties: source_id, _site_path, electrodes, _connections, _gaps
-        """
-        self.source_id = (yml_file, None)
-        self._site_path = os.path.dirname(yml_file)
-        self.electrodes = OrderedDict()
+    #     Sets several properties: source_id, _site_path, electrodes, _connections, _gaps
+    #     """
+    #     self.source_id = (yml_file, None)
+    #     self._site_path = os.path.dirname(yml_file)
+    #     self.electrodes = OrderedDict()
         
-        pips = PipetteMetadata(os.path.dirname(yml_file))
-        self._pipettes_yml = pips
-        all_colors = set(FLUOROPHORES.values())
-        genotype = self.genotype
-        for pip_id, pip_meta in pips.pipettes.items():
-            elec = Electrode(pip_id, start_time=pip_meta['patch_start'], stop_time=pip_meta['patch_stop'], device_id=pip_meta['ad_channel'], patch_status=pip_meta['pipette_status'])
-            self.electrodes[pip_id] = elec
+    #     pips = PipetteMetadata(os.path.dirname(yml_file))
+    #     self._pipettes_yml = pips
+    #     all_colors = set(FLUOROPHORES.values())
+    #     genotype = self.genotype
+    #     for pip_id, pip_meta in pips.pipettes.items():
+    #         elec = Electrode(pip_id, start_time=pip_meta['patch_start'], stop_time=pip_meta['patch_stop'], device_id=pip_meta['ad_channel'], patch_status=pip_meta['pipette_status'])
+    #         self.electrodes[pip_id] = elec
 
-            if pip_meta['got_data'] is False and pip_meta['pipette_status'] not in ['Low seal', 'GOhm seal', 'Not recorded']:
-                continue
+    #         if pip_meta['got_data'] is False and pip_meta['pipette_status'] not in ['Low seal', 'GOhm seal', 'Not recorded']:
+    #             continue
 
-            cell = Cell(self, pip_id, elec)
-            elec.cell = cell
+    #         cell = Cell(self, pip_id, elec)
+    #         elec.cell = cell
 
-            cell._target_layer = pip_meta.get('target_layer', '')
-            if not isinstance(cell._target_layer, str):
-                raise Exception('Target layer must be str, not "%r"' % cell._target_layer)
+    #         cell._target_layer = pip_meta.get('target_layer', '')
+    #         if not isinstance(cell._target_layer, str):
+    #             raise Exception('Target layer must be str, not "%r"' % cell._target_layer)
 
-            # load in the initial morphological call made by the experimenter
-            cell._morphology = {'initial_call': pip_meta.get('morphology', '')}
+    #         # load in the initial morphological call made by the experimenter
+    #         cell._morphology = {'initial_call': pip_meta.get('morphology', '')}
 
-            # load labels
-            cell._raw_labels = pip_meta['cell_labels']
-            colors = {}
-            for label,value in pip_meta['cell_labels'].items():
-                assert label not in cell.labels
-                if value == '':
-                    continue
-                m = re.match('(x)?(\+|\-)?(\?)?', value)
-                if m is None:
-                    raise Exception('Invalid label record for "%s": %s' % (label, value))
+    #         # load labels
+    #         cell._raw_labels = pip_meta['cell_labels']
+    #         colors = {}
+    #         for label,value in pip_meta['cell_labels'].items():
+    #             assert label not in cell.labels
+    #             if value == '':
+    #                 continue
+    #             m = re.match('(x)?(\+|\-)?(\?)?', value)
+    #             if m is None:
+    #                 raise Exception('Invalid label record for "%s": %s' % (label, value))
 
-                grps = m.groups()
-                absent = grps[0] == 'x'
-                positive = grps[1] == '+'
-                uncertain = grps[2] == '?'
+    #             grps = m.groups()
+    #             absent = grps[0] == 'x'
+    #             positive = grps[1] == '+'
+    #             uncertain = grps[2] == '?'
 
-                if label in ALL_LABELS:
-                    cell.labels[label] = positive
-                elif label in all_colors:
-                    # May need to re-evaluate in the future whether "uncertain" labels should be taken as positives.
-                    # The conservative approach is to say no, but it's likely that the vast majority of these uncertains
-                    # really are correct.
-                    # colors[label] = None if (absent or uncertain) else positive
-                    colors[label] = None if absent else positive
-                else:
-                    raise Exception("Invalid label or fluorescent color: %s" % label)
+    #             if label in ALL_LABELS:
+    #                 cell.labels[label] = positive
+    #             elif label in all_colors:
+    #                 # May need to re-evaluate in the future whether "uncertain" labels should be taken as positives.
+    #                 # The conservative approach is to say no, but it's likely that the vast majority of these uncertains
+    #                 # really are correct.
+    #                 # colors[label] = None if (absent or uncertain) else positive
+    #                 colors[label] = None if absent else positive
+    #             else:
+    #                 raise Exception("Invalid label or fluorescent color: %s" % label)
 
-            # check for internal dye fill
-            dye = pip_meta['internal_dye']
-            dye_color = FLUOROPHORES[dye]
-            cell.labels[dye] = colors.get(dye_color, None)
+    #         # check for internal dye fill
+    #         dye = pip_meta['internal_dye']
+    #         dye_color = FLUOROPHORES[dye]
+    #         cell.labels[dye] = colors.get(dye_color, None)
 
-            # decide whether each driver was expressed
-            if self.lims_record['organism'] == 'mouse':
-                if genotype is None:
-                    raise Exception("Mouse specimen has no genotype: %s\n  (from %r)" % (self.specimen_name, self))
-                for driver,positive in genotype.predict_driver_expression(colors).items():
-                    cell.labels[driver] = positive
+    #         # decide whether each driver was expressed
+    #         if self.lims_record['organism'] == 'mouse':
+    #             if genotype is None:
+    #                 raise Exception("Mouse specimen has no genotype: %s\n  (from %r)" % (self.specimen_name, self))
+    #             for driver,positive in genotype.predict_driver_expression(colors).items():
+    #                 cell.labels[driver] = positive
 
-            # load old QC keys
-            # (sets attributes: holding_qc, access_qc, spiking_qc)
-            if pip_meta['got_data'] is False:
-                cell.access_qc = False
-                cell.spiking_qc = False
-                cell.holding_qc = False
-            elif 'cell_qc' in pip_meta:
-                for k in ['holding', 'access', 'spiking']:
-                    qc_pass = pip_meta['cell_qc'][k]
-                    if qc_pass == '':
-                        qc_pass = None
-                    elif isinstance(qc_pass, str):
-                        if qc_pass not in '+/-?':
-                            raise ValueError('Invalid cell %s QC string: "%s"' % (k, qc_pass))
-                        qc_pass = qc_pass in '+/'
-                    setattr(cell, k+'_qc', qc_pass)
+    #         # load old QC keys
+    #         # (sets attributes: holding_qc, access_qc, spiking_qc)
+    #         if pip_meta['got_data'] is False:
+    #             cell.access_qc = False
+    #             cell.spiking_qc = False
+    #             cell.holding_qc = False
+    #         elif 'cell_qc' in pip_meta:
+    #             for k in ['holding', 'access', 'spiking']:
+    #                 qc_pass = pip_meta['cell_qc'][k]
+    #                 if qc_pass == '':
+    #                     qc_pass = None
+    #                 elif isinstance(qc_pass, str):
+    #                     if qc_pass not in '+/-?':
+    #                         raise ValueError('Invalid cell %s QC string: "%s"' % (k, qc_pass))
+    #                     qc_pass = qc_pass in '+/'
+    #                 setattr(cell, k+'_qc', qc_pass)
                 
-        # load synapse/gap connections
-        for cell in self.cells.values():
-            pip_meta = pips.pipettes[cell.cell_id]
+    #     # load synapse/gap connections
+    #     for cell in self.cells.values():
+    #         pip_meta = pips.pipettes[cell.cell_id]
 
-            for src, dst in [('synapse_to', '_connections'), ('gap_to', '_gaps')]:
-                conns = pip_meta.get(src, None)
-                if conns is None:
-                    continue
-                conn_list = getattr(self, dst)
-                if conn_list is None:
-                    conn_list = []
-                    setattr(self, dst, conn_list)
+    #         for src, dst in [('synapse_to', '_connections'), ('gap_to', '_gaps')]:
+    #             conns = pip_meta.get(src, None)
+    #             if conns is None:
+    #                 continue
+    #             conn_list = getattr(self, dst)
+    #             if conn_list is None:
+    #                 conn_list = []
+    #                 setattr(self, dst, conn_list)
 
-                for post_id in conns:
-                    # allow tentative connections like "4?"
-                    if isinstance(post_id, str):
-                        m = re.match("^(\d+)(\?)?$", post_id)
-                        if m is None:
-                            post_id = None  # triggers ValueError below
-                        else:
-                            post_id = int(m.groups()[0])
-                        if m.groups()[1] == '?':
-                            # ignore questionable connections for now
-                            continue
-                    if post_id not in self.cells:
-                        raise ValueError("Postsynaptic cell ID %r is invalid" % post_id)
-                    conn_list.append((cell.cell_id, post_id))
+    #             for post_id in conns:
+    #                 # allow tentative connections like "4?"
+    #                 if isinstance(post_id, str):
+    #                     m = re.match("^(\d+)(\?)?$", post_id)
+    #                     if m is None:
+    #                         post_id = None  # triggers ValueError below
+    #                     else:
+    #                         post_id = int(m.groups()[0])
+    #                     if m.groups()[1] == '?':
+    #                         # ignore questionable connections for now
+    #                         continue
+    #                 if post_id not in self.cells:
+    #                     raise ValueError("Postsynaptic cell ID %r is invalid" % post_id)
+    #                 conn_list.append((cell.cell_id, post_id))
 
     # def _generate_cell_qc(self, cell):
     #     # tempporary qc used to decide how many connections were probed in an
@@ -709,26 +722,13 @@ class Experiment(object):
         """Path to site mosaic file
         """
         if self._mosaic_file is None:
-            sitefile = os.path.join(self.path, "site.mosaic")
-            if not os.path.isfile(sitefile):
-                sitefile = os.path.join(os.path.split(self.path)[0], "site.mosaic")
-            if not os.path.isfile(sitefile):
-                mosaicfiles = [f for f in os.listdir(self.path) if f.endswith('.mosaic')]
-                if len(mosaicfiles) == 1:
-                    sitefile = os.path.join(self.path, mosaicfiles[0])
-            if not os.path.isfile(sitefile):
-                # print(os.listdir(self.path))
-                # print(os.listdir(os.path.split(self.path)[0]))
-                return None
-            self._mosaic_file = sitefile
+            self._mosaic_file = self.library.get_mosaic_file(self)
         return self._mosaic_file
 
     @property
     def pipette_file(self):
-        pf = os.path.join(self.path, 'pipettes.yml')
-        if not os.path.isfile(pf):
-            return None
-        return pf
+        """Return a pipettes.yml file for this experiment (or None)."""
+        return self.library.pipette_file(self)
 
     @property
     def path(self):
@@ -753,7 +753,7 @@ class Experiment(object):
         #             break
         #     if self._site_path is None:
         #         raise Exception("Cannot find filesystem path for experiment %s. Attempted paths:\n%s" % (self, "\n".join(paths)))
-        return self._site_path
+        return self.library.path(self)
 
     def __repr__(self):
         try:
@@ -775,7 +775,7 @@ class Experiment(object):
             self._site_info = self.library.get_site_info(self)
             #index = os.path.join(self.path, '.index')
             #if not os.path.isfile(index):
-            #    return None
+            #    return 
             #self._site_info = pg.configfile.readConfigFile(index)['.']
         return self._site_info
 
@@ -793,10 +793,10 @@ class Experiment(object):
     def slice_timestamp(self):
         return self.slice_info['__timestamp__']
 
-    @property
-    def slice_dir(self):
-        return self.library.get_slice_directory(expt)
-        #return os.path.join(self.path, '..')
+    #@property
+    #def slice_dir(self):
+    #    return self.library.get_slice_directory(expt)
+    #    #return os.path.join(self.path, '..')
 
     @property
     def expt_info(self):
@@ -808,32 +808,39 @@ class Experiment(object):
             #self._expt_info = pg.configfile.readConfigFile(index)['.']
         return self._expt_info
 
-    @property
-    def expt_path(self):
-        return os.path.abspath(os.path.join(self.path, '..', '..'))
+    #@property
+    #def expt_path(self):
+    #    return os.path.abspath(os.path.join(self.path, '..', '..'))
 
     @property
     def nwb_file(self):
-        if self._nwb_file is None:
-            p = self.path
-            files = glob.glob(os.path.join(p, '*.nwb'))
-            if len(files) == 0:
-                files = glob.glob(os.path.join(p, '*.NWB'))
-            if len(files) == 0:
-                return None
-            elif len(files) > 1:
-                # multiple NWB files here; try using the file manifest to resolve.
-                manifest = os.path.join(self.path, 'file_manifest.yml')
-                if os.path.isfile(manifest):
-                    manifest = yaml.load(open(manifest, 'rb'))
-                    for f in manifest:
-                        if f['category'] == 'MIES physiology':
-                            self._nwb_file = os.path.join(os.path.dirname(self.path), f['path'])
-                            break
-                if self._nwb_file is None:
-                    raise Exception("Multiple NWB files found for %s" % self)
-            self._nwb_file = files[0]
-        return self._nwb_file
+        return self.ephys_file
+        # if self._nwb_file is None:
+        #     p = self.path
+        #     files = glob.glob(os.path.join(p, '*.nwb'))
+        #     if len(files) == 0:
+        #         files = glob.glob(os.path.join(p, '*.NWB'))
+        #     if len(files) == 0:
+        #         return None
+        #     elif len(files) > 1:
+        #         # multiple NWB files here; try using the file manifest to resolve.
+        #         manifest = os.path.join(self.path, 'file_manifest.yml')
+        #         if os.path.isfile(manifest):
+        #             manifest = yaml.load(open(manifest, 'rb'))
+        #             for f in manifest:
+        #                 if f['category'] == 'MIES physiology':
+        #                     self._nwb_file = os.path.join(os.path.dirname(self.path), f['path'])
+        #                     break
+        #         if self._nwb_file is None:
+        #             raise Exception("Multiple NWB files found for %s" % self)
+        #     self._nwb_file = files[0]
+        # return self._nwb_file
+
+    @property
+    def ephys_file(self):
+        if self._ephys_file is None:
+            self._ephys_file = self.library.get_ephys_file(self)
+        return self._ephys_file
 
     @property
     def nwb_cache_file(self):
