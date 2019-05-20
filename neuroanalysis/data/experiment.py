@@ -1,5 +1,6 @@
 from collections import OrderedDict
 from neuroanalysis.data.pair import Pair
+import os
 
 class Experiment(object):
     """Base class defining the structure of an experiment.
@@ -753,7 +754,10 @@ class Experiment(object):
         #             break
         #     if self._site_path is None:
         #         raise Exception("Cannot find filesystem path for experiment %s. Attempted paths:\n%s" % (self, "\n".join(paths)))
-        return self.library.path(self)
+        if self._site_path is not None:
+            return self.library.path(self)
+        else:
+            return ''
 
     def __repr__(self):
         try:

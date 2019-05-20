@@ -45,7 +45,9 @@ def get_expt_info(expt):
         expt_path = os.path.split(os.path.split(expt.path)[0])[0]
         index = os.path.join(expt_path, '.index')
         if not os.path.isfile(index):
-            raise TypeError("Cannot find index file (%s) for experiment %s" % (index, expt))
+            #raise TypeError("Cannot find index file (%s) for experiment %s" % (index, expt))
+            expt._expt_info = {}
+            return expt._expt_info
         info = pg.configfile.readConfigFile(index)['.']
         expt._expt_info = info
     return expt._expt_info
@@ -293,6 +295,7 @@ def load_mosaiceditor_connection_file(expt, exp_json):
     ## create Cells for recorded cells
     for name, data in exp_json['Headstages'].items():
         elec = Electrode(name, start_time=None, stop_time=None, device_id=name[-1])
+        expt.electrodes[name] = elec
         cell = Cell(expt, name, elec)
         elec.cell = cell
         cell.position = (data['x_pos'], data['y_pos'], data['z_pos'])
