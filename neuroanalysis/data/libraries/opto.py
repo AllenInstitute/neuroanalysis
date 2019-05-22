@@ -155,16 +155,16 @@ def process_meta_info(expt, meta_info):
     Called after load_from_file."""
     ## Need to load: presynapticCre, presynapticEffector, [class, reporter, layer for each headstage], internal
 
-    preEffector = meta_info.get('presynapticEffector')
+    preEffector = meta_info.get('presynapticEffector').lower()
     for e_id, elec in expt.electrodes.items():
         n = e_id[-1]
         cell = elec.cell
         cell._morphology['initial_call'] = meta_info.get('HS%s_class'%n)
         cell._target_layer = meta_info.get('HS%s_layer'%n)
-        if meta_info.get('HS%s_reporter'%n) == 'positive':
-            cell._cre_type = meta_info.get('presynapticCre')
-        label_cell(cell, preEffector, meta_info.get('HS%s_reporter'%n) == 'positive')
-        elec._internal_solution = meta_info.get('internal')
+        if meta_info.get('HS%s_reporter'%n).lower() == 'positive':
+            cell._cre_type = meta_info.get('presynapticCre').lower()
+        label_cell(cell, preEffector, meta_info.get('HS%s_reporter'%n).lower() == 'positive')
+        elec._internal_solution = meta_info.get('internal').lower()
         if len(meta_info.get('distances')) > 0: ### we may not have distance measurements for all cells
             dist = [e for e in meta_info.get('distances') if e.get('headstage')==n]
             if len(dist) > 1:
@@ -175,11 +175,11 @@ def process_meta_info(expt, meta_info):
 
     for i, cell in expt.cells.items():
         if not cell.has_readout and cell.has_stimulation:
-            cell._cre_type = meta_info.get('presynapticCre')
+            cell._cre_type = meta_info.get('presynapticCre').lower()
             label_cell(cell, preEffector, positive=True) ## assume all non-patched stimulated cells are positive for preEffector
 
     expt.expt_info ## just have to touch it 
-    expt.expt_info['internal_solution'] = meta_info.get('internal') 
+    expt.expt_info['internal_solution'] = meta_info.get('internal').lower() 
 
 
 
@@ -196,17 +196,17 @@ def label_cell(cell, preEffector, positive=True):
     ## if the cell is positive for the preEffector, populate genetic labels
     if positive:
         cell.labels[preEffector] = True
-        if preEffector == 'Ai167':
+        if preEffector == 'ai167':
             cell.labels['tdTomato'] = True
-        elif preEffector == 'Ai136':
+        elif preEffector == 'ai136':
             cell.labels['EYFP'] = True
 
     ## if the cell is patched (has an electrode), populate dyes 
     ##    -- this assumes which dye is used for the whole experiment based on the color of the preEffector
     if cell.electrode is not None:
-        if preEffector == 'Ai167':
+        if preEffector == 'ai167':
             cell.labels['AF488'] = True
-        elif preEffector == 'Ai136':
+        elif preEffector == 'ai136':
             cell.labels['AF594'] = True
 
 
