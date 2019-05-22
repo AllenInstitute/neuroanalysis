@@ -318,7 +318,7 @@ def load_mosaiceditor_connection_file(expt, exp_json):
 def populate_connection_calls(expt, exp_json):
     for p in expt.pairs.values():
         try:
-            p.connection_call = exp_json['Headstages'][p.postCell.cell_id]['Connections'][p.preCell.cell_id]
+            p._connection_call = exp_json['Headstages'][p.postCell.cell_id]['Connections'][p.preCell.cell_id]
             p._probed = True
         except KeyError:
             p._probed = False
