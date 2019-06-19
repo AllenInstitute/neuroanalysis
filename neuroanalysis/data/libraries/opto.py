@@ -155,17 +155,17 @@ def process_meta_info(expt, meta_info):
     Called after load_from_file."""
     ## Need to load: presynapticCre, presynapticEffector, [class, reporter, layer for each headstage], internal
 
-    preEffector = meta_info.get('presynapticEffector').lower()
+    preEffector = meta_info.get('presynapticEffector', '').lower()
     for e_id, elec in expt.electrodes.items():
         n = e_id[-1]
         cell = elec.cell
         cell._morphology['initial_call'] = meta_info.get('HS%s_class'%n)
         cell._target_layer = meta_info.get('HS%s_layer'%n)
-        if meta_info.get('HS%s_reporter'%n).lower() == 'positive':
-            cell._cre_type = meta_info.get('presynapticCre').lower()
-        label_cell(cell, preEffector, meta_info.get('HS%s_reporter'%n).lower() == 'positive')
-        elec._internal_solution = meta_info.get('internal').lower()
-        if len(meta_info.get('distances')) > 0: ### we may not have distance measurements for all cells
+        if meta_info.get('HS%s_reporter'%n, '').lower() == 'positive':
+            cell._cre_type = meta_info.get('presynapticCre','').lower()
+        label_cell(cell, preEffector, meta_info.get('HS%s_reporter'%n, '').lower() == 'positive')
+        elec._internal_solution = meta_info.get('internal', '').lower()
+        if len(meta_info.get('distances', [])) > 0: ### we may not have distance measurements for all cells
             dist = [e for e in meta_info.get('distances') if e.get('headstage')==n]
             if len(dist) > 1:
                 raise Exception('Something is wrong.')
@@ -175,11 +175,11 @@ def process_meta_info(expt, meta_info):
 
     for i, cell in expt.cells.items():
         if not cell.has_readout and cell.has_stimulation:
-            cell._cre_type = meta_info.get('presynapticCre').lower()
+            cell._cre_type = meta_info.get('presynapticCre', '').lower()
             label_cell(cell, preEffector, positive=True) ## assume all non-patched stimulated cells are positive for preEffector
 
     expt.expt_info ## just have to touch it 
-    expt.expt_info['internal_solution'] = meta_info.get('internal').lower() 
+    expt.expt_info['internal_solution'] = meta_info.get('internal', '').lower() 
 
 
 
