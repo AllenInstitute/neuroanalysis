@@ -290,6 +290,8 @@ def load_mosaiceditor_connection_file(expt, exp_json):
             cell.position = tuple(data['position'])
             cell.has_readout = False
             cell.has_stimulation = True
+            cell._target_layer = data.get('target_layer')
+            cell._percent_depth = data.get('percent_depth')
             expt._cells[cell.cell_id] = cell
 
     ## create Cells for recorded cells
@@ -302,6 +304,8 @@ def load_mosaiceditor_connection_file(expt, exp_json):
         cell.angle = data['angle']
         cell.has_readout = True
         cell.has_stimulation = True
+        cell._target_layer = data.get('target_layer')
+        cell._percent_depth = data.get('percent_depth')
         expt._cells[cell.cell_id] = cell
 
 
