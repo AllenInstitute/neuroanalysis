@@ -27,6 +27,7 @@ class Cell(object):
         self._raw_labels = {}
         self.position = None
         self._target_layer = None
+        self._percent_depth = None
         self._is_excitatory = None
         self._cre_type = None
         self.has_readout = None ## should be set to True if we can have info about this cells postsynaptic activity, False if we don't
@@ -132,6 +133,11 @@ class Cell(object):
         different.
         """
         return self._target_layer
+
+    @property
+    def percent_depth(self):
+        """Columnar depth where 0 is the top of the pia, and 1 is the bottom of L6."""
+        return self._percent_depth
 
     @property
     def is_excitatory(self):
