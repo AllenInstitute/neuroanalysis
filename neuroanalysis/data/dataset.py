@@ -21,8 +21,9 @@ import numpy as np
 import scipy.signal
 from .. import util
 from collections import OrderedDict
-from ..stats import ragged_mean
-from ..baseline import float_mode
+from .stats import ragged_mean
+from .baseline import float_mode
+from .filter import downsample
 
 
 class Container(object):
@@ -76,17 +77,18 @@ class Container(object):
         return path[::-1]
 
 
-class DataSet(Container):
-    """A generic container for RecordingSequence and SyncRecording instances that
+
+class Dataset(Container):
+    """A generic container for RecordingSequence, SyncRecording, Recording, and TSeries instances that
     were acquired together.
     
     The boundaries between one experiment and the next are sometimes ambiguous, but
     in general we group multiple recordings into an experiment if they are likely to
     be analyzed together. Likewise, recordings that have no causal relationship
-    to each other probably belong in different Experiment containers. For example,
+    to each other probably belong in different Dataset containers. For example,
     a series of recordings made on the same cell almost certainly belong in the same
-    Experiment, whereas recordings made from different pieces of tissue probably
-    belong in different Experiments.
+    Dataset, whereas recordings made from different pieces of tissue probably
+    belong in different Datasets.
     """
     def __init__(self, data=None, meta=None):
         Container.__init__(self)
@@ -96,7 +98,7 @@ class DataSet(Container):
     
     @property
     def contents(self):
-        """A list of data objects (Trace, Recording, SyncRecording, RecordingSequence)
+        """A list of data objects (TSeries, Recording, SyncRecording, RecordingSequence)
         directly contained in this experiment.
         
         Grandchild objects are not included in this list.
@@ -108,7 +110,7 @@ class DataSet(Container):
 
     @property
     def all_traces(self):
-        return self.find(Trace)
+        return self.find(TSeries)
     
     @property
     def all_recordings(self):
@@ -236,13 +238,6 @@ class RecordingSequence(Container):
         return self.contents
 
 
-class IVCurve(RecordingSequence):
-    """A sequence of recordings on a single patch-clamp amplifier that vary the amplitude
-    of a current or voltage pulse, typically used to characterize intrinsic membrane properties
-    of the cell.
-    """
-
-
 class SyncRecording(Container):
     """Representation of multiple synchronized recordings.
 
@@ -264,7 +259,7 @@ class SyncRecording(Container):
     def devices(self):
         """A list of the names of devices in this recording.
         """
-        return self._recordings.keys()
+        return list(self._recordings.keys())
 
     def __getitem__(self, item):
         """Return a recording given its device name.
@@ -275,7 +270,7 @@ class SyncRecording(Container):
     def recordings(self):
         """A list of the recordings in this syncrecording.
         """
-        return self._recordings.values()
+        return list(self._recordings.values())
 
     def data(self):
         return np.concatenate([self[dev].data()[None, :] for dev in self.devices], axis=0)
@@ -304,23 +299,24 @@ class Recording(Container):
     possibly with multiple channels of data (for example, a recording from a single
     patch-clamp headstage with input and output channels, or ).
     
-    Each channel is described by a single Trace instance. Channels are often 
+    Each channel is described by a single TSeries instance. Channels are often 
     recorded with the same timebase, but this is not strictly required.
     """
-    def __init__(self, channels=None, start_time=None, device_type=None, device_id=None, sync_recording=None):
+    def __init__(self, channels=None, start_time=None, device_type=None, device_id=None, sync_recording=None, **meta):
         Container.__init__(self)
         self._meta = OrderedDict([
             ('start_time', start_time),
             ('device_type', device_type),
             ('device_id', device_id),
         ])
+        self._meta.update(meta)
         
         if channels is None:
             channels = OrderedDict()
         else:
             channels = OrderedDict(channels)
             for k,v in channels.items():
-                assert isinstance(v, Trace)
+                assert isinstance(v, TSeries)
         self._channels = channels
 
         self._sync_recording = sync_recording
@@ -353,11 +349,11 @@ class Recording(Container):
     def sync_recording(self):
         return self._sync_recording
 
+    def time_slice(self, start, stop):
+        return RecordingView(self, start, stop)
+
     def __getitem__(self, chan):
-        if isinstance(chan, slice):
-            return RecordingView(self, chan)
-        else:
-            return self._channels[chan]
+        return self._channels[chan]
 
     def data(self):
         return np.concatenate([self[ch].data[:,None] for ch in self.channels], axis=1)
@@ -374,36 +370,35 @@ class Recording(Container):
 class RecordingView(Recording):
     """A time-slice of a multi channel recording
     """
-    def __init__(self, rec, sl):
+    def __init__(self, rec, start, stop):
         self._parent_rec = rec
-        self._view_slice = sl
+        self._view_slice = (start, stop)
         chans = OrderedDict([(k, rec[k]) for k in rec.channels])
-        Recording.__init__(self, 
-            channels=chans, start_time=rec.start_time, device_type=rec.device_type,
-            device_id=rec.device_id, sync_recording=rec.sync_recording)
+        meta = rec.meta.copy()
+        Recording.__init__(self, channels=chans, sync_recording=rec.sync_recording, **meta)
 
     def __getattr__(self, attr):
         return getattr(self._parent_rec, attr)
 
     def __getitem__(self, item):
-        return self._parent_rec[item][self._view_slice]
+        return self._parent_rec[item].time_slice(*self._view_slice)
 
     @property
     def parent(self):
         return self._parent_rec
 
-    @property
-    def source_indices(self):
-        """Return the indices of this view on the original Recording.
-        """
-        v = self
-        start = 0
-        while True:
-            start += self._view_slice.start
-            v = v.parent
-            if not isinstance(v, RecordingView):
-                break
-        return start, start + len(self)
+    # @property
+    # def source_indices(self):
+    #     """Return the indices of this view on the original Recording.
+    #     """
+    #     v = self
+    #     start = 0
+    #     while True:
+    #         start += self._view_slice.start
+    #         v = v.parent
+    #         if not isinstance(v, RecordingView):
+    #             break
+    #     return start, start + len(self)
 
 
 class PatchClampRecording(Recording):
@@ -497,7 +492,7 @@ class PatchClampRecording(Recording):
 
     @property
     def baseline_regions(self):
-        """A list of (start,stop) index pairs that cover regions of the recording
+        """A list of (start,stop) time pairs that cover regions of the recording
         the cell is expected to be in a steady state.
         """
         return []
@@ -507,12 +502,12 @@ class PatchClampRecording(Recording):
         """All items in baseline_regions concatentated into a single trace.
         """
         if self._baseline_data is None:
-            data = [self['primary'].data[start:stop] for start,stop in self.baseline_regions]
+            data = [self['primary'].time_slice(start,stop).data for start,stop in self.baseline_regions]
             if len(data) == 0:
                 data = np.empty(0, dtype=self['primary'].data.dtype)
             else:
                 data = np.concatenate(data)
-            self._baseline_data = Trace(data, sample_rate=self['primary'].sample_rate, recording=self)
+            self._baseline_data = TSeries(data, sample_rate=self['primary'].sample_rate, recording=self)
         return self._baseline_data
 
     @property
@@ -575,7 +570,7 @@ class PatchClampRecording(Recording):
         return "<%s %s>" % (self.__class__.__name__, self._descr())
 
 
-class Trace(Container):
+class TSeries(Container):
     """A homogeneous time series data set. 
     
     This is a representation of a single stream of data recorded over time. The
@@ -588,25 +583,25 @@ class Trace(Container):
     * A video stream from a camera
     * A digital trigger waveform
     
-    Traces may specify units, a starting time, and either a sample period or an
-    array of time values.
+    TSeries may specify units, a starting time, and either a sample period / sample rate
+    or an array of time values, one per sample.
 
     Parameters
     ----------
     data : array | None
-        Array of data contained in this Trace.
+        Array of data contained in this TSeries.
     dt : float | None
         Optional value specifying the time difference between any two adjacent samples
-        in the data; inverse of *sample_rate*. See ``Trace.dt``.
+        in the data; inverse of *sample_rate*. See ``TSeries.dt``.
     t0 : float | None
         Optional time value of the first sample in the data, relative to *start_time*. Default is 0.
-         See ``Trace.t0``.
+        See ``TSeries.t0``.
     sample_rate : float | None
         Optional value specifying the sampling rate of the data; inverse of *dt*.
-         See ``Trace.sample_rate``.
+        See ``TSeries.sample_rate``.
     start_time : float | None
-        Optional value giving the absloute starting time of the Trace as a unix timestamp
-        (seconds since epoch).  See ``Trace.start_time``.
+        Optional value giving the absloute starting time of the TSeries as a unix timestamp
+        (seconds since epoch).  See ``TSeries.start_time``.
     time_values : array | None
         Optional array of the time values for each sample, relative to *start_time*. 
         This option can be used to specify data with timepoints that are irregularly sampled,
@@ -614,7 +609,7 @@ class Trace(Container):
     units : str | None
         Optional string specifying the units associated with *data*. It is recommended
         to use unscaled SI units (e.g. 'V' instead of 'mV') where possible.
-        See ``Trace.units``.
+        See ``TSeries.units``.
     meta : 
         Any extra keyword arguments are interpreted as custom metadata and added to ``self.meta``.
     """
@@ -670,7 +665,7 @@ class Trace(Container):
     
     @property
     def sample_rate(self):
-        """The sample rate for this Trace.
+        """The sample rate for this TSeries.
         
         If no sample rate was specified, then this value is calculated from
         self.dt.
@@ -683,7 +678,7 @@ class Trace(Container):
 
     @property
     def dt(self):
-        """The time step between samples for this Trace.
+        """The time step between samples for this TSeries.
         
         If no time step was specified, then this value is calculated from
         self.sample_rate.
@@ -739,7 +734,7 @@ class Trace(Container):
 
     @property
     def t_end(self):
-        """The last time value in this Trace.
+        """The last time value in this TSeries.
         """
         return self.time_at(len(self) - 1)
 
@@ -823,11 +818,11 @@ class Trace(Container):
         
         Time values are specified in seconds relative to start_time.
         
-        If no sample time values were provided for this Trace, then the array
+        If no sample time values were provided for this TSeries, then the array
         is automatically generated based on other timing metadata (t0, dt,
         sample_rate).
         
-        If no timing information at all was specified for this Trace, then
+        If no timing information at all was specified for this TSeries, then
         accessing this property raises TypeError.
         """
         if not self.has_timing:
@@ -843,14 +838,14 @@ class Trace(Container):
 
     @property
     def regularly_sampled(self):
-        """Boolean indicating whether the samples in this Trace have equal
+        """Boolean indicating whether the samples in this TSeries have equal
         time intervals.
         
         If either dt or sample_rate was specified for this trace, then this
         property is True. If only time values were given, then this property
         is True if the intervals between samples differ by less than 1%.
         
-        If no sample timing was specified for this Trace, then this property
+        If no sample timing was specified for this TSeries, then this property
         is False.
         """
         if not self.has_timing:
@@ -869,7 +864,7 @@ class Trace(Container):
     @property
     def has_timing(self):
         """Boolean indicating whether any timing information was specified for
-        this Trace.
+        this TSeries.
         """
         return (self.has_time_values or 
                 self._meta['dt'] is not None or 
@@ -878,7 +873,7 @@ class Trace(Container):
     @property
     def has_time_values(self):
         """Boolean indicating whether an array of time values was explicitly
-        specified for this Trace.
+        specified for this TSeries.
         """
         return self._time_values is not None
 
@@ -928,13 +923,13 @@ class Trace(Container):
 
     @property
     def units(self):
-        """Units string for the data in this Trace.
+        """Units string for the data in this TSeries.
         """
         return self._meta['units']
 
     @property
     def shape(self):
-        """The shape of the array stored in this Trace.
+        """The shape of the array stored in this TSeries.
         """
         return self.data.shape
     
@@ -943,7 +938,7 @@ class Trace(Container):
     
     @property
     def duration(self):
-        """Duration of this Trace in seconds.
+        """Duration of this TSeries in seconds.
 
         If time values are specified for this trace, then this property
         is the difference between the first and last time values. 
@@ -958,13 +953,13 @@ class Trace(Container):
 
     @property
     def ndim(self):
-        """Number of dimensions of the array contained in this Trace.
+        """Number of dimensions of the array contained in this TSeries.
         """
         return self.data.ndim
     
     @property
     def channel_id(self):
-        """The name of the Recording channel that contains this Trace.
+        """The name of the Recording channel that contains this TSeries.
 
         For example::
 
@@ -981,17 +976,17 @@ class Trace(Container):
         return self._recording
 
     def copy(self, data=None, time_values=None, **kwds):
-        """Return a copy of this Trace.
+        """Return a copy of this TSeries.
         
-        The new Trace will have the same data, timing information, and metadata
+        The new TSeries will have the same data, timing information, and metadata
         unless otherwise specified in the arguments.
         
         Parameters
         ----------
         data : array | None
-            If specified, sets the data array for the new Trace.
+            If specified, sets the data array for the new TSeries.
         time_values : array | None
-            If specified, sets the time_values array for the new Trace.
+            If specified, sets the time_values array for the new TSeries.
         kwds :
             All extra keyword arguments will overwrite metadata properties.
             These include dt, sample_rate, t0, start_time, units, and
@@ -1010,7 +1005,7 @@ class Trace(Container):
         meta = self._meta.copy()
         meta.update(kwds)
         
-        return Trace(data, time_values=tval, recording=self.recording, **meta)
+        return TSeries(data, time_values=tval, recording=self.recording, **meta)
 
     @property
     def parent(self):
@@ -1018,9 +1013,9 @@ class Trace(Container):
 
     def __getitem__(self, item):
         if isinstance(item, slice):
-            return TraceView(self, item)
+            return TSeriesView(self, item)
         else:
-            raise TypeError("Invalid Trace slice: %r" % item)
+            raise TypeError("Invalid TSeries slice: %r" % item)
 
     def downsample(self, n=None, f=None):
         """Return a downsampled copy of this trace.
@@ -1043,14 +1038,14 @@ class Trace(Container):
                 raise TypeError("Must specify either n or f.")
             n = int(np.round(self.sample_rate / f))
             if abs(n - (self.sample_rate / f)) > 1e-6:
-                raise ValueError("Cannot downsample to %gHz; the resulting downsample factor is not an integer (try Trace.resample instead)." % f)
+                raise ValueError("Cannot downsample to %gHz; the resulting downsample factor is not an integer (try TSeries.resample instead)." % f)
         if n == 1:
             return self
         if n <= 0:
             raise Exception("Invalid downsampling factor: %d" % n)
         
         # downsample
-        data = util.downsample(self.data, n, axis=0)
+        data = downsample(self.data, n, axis=0)
         
         # handle timing
         tvals = self._time_values
@@ -1071,7 +1066,7 @@ class Trace(Container):
         Parameters
         ----------
         sample_rate : float
-            The new sample rate of the returned Trace
+            The new sample rate of the returned TSeries
 
         Notes
         -----
@@ -1121,25 +1116,42 @@ class Trace(Container):
         return self.copy(data=self.data - x)
 
     def mean(self):
-        """Mean value of the data in this Trace.
+        """Return the mean value of the data in this TSeries.
 
         Equivalent to self.data.mean()
         """
         return self.data.mean()
 
     def std(self):
-        """Standard deviation of the data in this Trace.
+        """Return the standard deviation of the data in this TSeries.
 
         Equivalent to self.data.std()
         """
         return self.data.std()
 
     def median(self):
-        """Median value of the data in this Trace.
+        """Return the median value of the data in this TSeries.
 
         Equivalent to np.median(self.data)
         """
         return np.median(self.data)
+        
+    def diff(self):
+        """Return the derivative of values in this trace with respect to its timebase.
+        
+        Note that the returned trace values are sampled half way between the time
+        values of the input trace.
+        """
+        diff = np.diff(self.data)
+        if self.has_time_values:
+            dt = np.diff(self.time_values)
+            t = self.time_values[:-1] + (0.5 * dt)
+            dvdt = diff / dt
+            return TSeries(data=dvdt, time_values=t)
+        else:
+            t0 = self.t0 + (0.5*self.dt)
+            dvdt = diff / self.dt
+            return TSeries(data=dvdt, t0=t0, dt=self.meta['dt'], sample_rate=self.meta['sample_rate'])
     
     def __repr__(self):
         if self.has_timing:
@@ -1164,7 +1176,11 @@ class Trace(Container):
         )
 
 
-class TraceView(Trace):
+# for backward compatibility
+Trace = TSeries
+
+
+class TSeriesView(TSeries):
     def __init__(self, trace, sl):
         self._parent_trace = trace
         self._view_slice = sl
@@ -1176,7 +1192,7 @@ class TraceView(Trace):
             meta['time_values'] = trace.time_values[sl].copy()
         elif trace.has_timing:
             meta['t0'] = trace.time_at(inds[0])
-        Trace.__init__(self, data, recording=trace.recording, **meta)
+        TSeries.__init__(self, data, recording=trace.recording, **meta)
 
     @property
     def parent(self):
@@ -1190,30 +1206,30 @@ class TraceView(Trace):
 
     @property
     def source_trace(self):
-        """The original trace that is viewed by this TraceView.
+        """The original trace that is viewed by this TSeriesView.
         """
         v = self
         while True:
             v = v._parent_trace
-            if not isinstance(v, TraceView):
+            if not isinstance(v, TSeriesView):
                 break
         return v
 
     @property
     def source_indices(self):
-        """The indices of this view on the original Trace.
+        """The indices of this view on the original TSeries.
         """
         v = self
         start = 0
         while True:
             start += self._view_slice.start
             v = v._parent_trace
-            if not isinstance(v, TraceView):
+            if not isinstance(v, TSeriesView):
                 break
         return start, start + len(self)
 
 
-class TraceList(object):
+class TSeriesList(object):
     def __init__(self, traces=None):
         self.traces = []
         if traces is not None:

@@ -1,6 +1,6 @@
 import numpy as np
 from . import Sim, Section, Leak, LGKfast, LGKslow, LGNa, Noise, PatchClamp
-from ..data import Trace, PatchClampRecording
+from ..data import TSeries, PatchClampRecording
 from ..units import um, mS, uV, mV, pA, cm, MOhm, ms
 
 
@@ -46,7 +46,7 @@ class ModelCell(object):
             self.mechs[mech].enabled = True
 
     def test(self, command, mode):
-        """Send a command (Trace) to the electrode and return a PatchClampRecording
+        """Send a command (TSeries) to the electrode and return a PatchClampRecording
         that contains the result.
         """
         self.clamp.set_mode(mode)
@@ -62,7 +62,7 @@ class ModelCell(object):
         # collect soma and pipette potentials
         t = result['t']
         vm = result['soma.V']
-        response = Trace(vm, time_values=t)
+        response = TSeries(vm, time_values=t)
         pip = result['electrode.V'] if mode == 'ic' else result['electrode.I']
         
         # Add in a little electrical recording noise        
@@ -70,7 +70,7 @@ class ModelCell(object):
             enoise = self.rec_noise_sigma[mode]
             pip = pip + np.random.normal(size=len(pip), scale=enoise)
         
-        recording = Trace(pip, time_values=t)
+        recording = TSeries(pip, time_values=t)
         
         channels = {'command': command, 'primary': recording, 'vsoma': response}
         kwds = {

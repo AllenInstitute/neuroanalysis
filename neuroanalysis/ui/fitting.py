@@ -55,7 +55,7 @@ class FitExplorer(QtGui.QWidget):
         for k in self.model.param_names:
             for pname in ['initial parameters', 'fit parameters']:
                 param = self.params.child(pname, k)
-                spin = param.items.keys()[0].widget
+                spin = list(param.items.keys())[0].widget
                 spin.proxy.setDelay(0)
         
         self.update_plots()
@@ -75,18 +75,19 @@ class FitExplorer(QtGui.QWidget):
         self._update_fit_stats()
         
     def _update_fit_stats(self):
-        self.params['chi squared'] = self.fit.chisqr
+        with pg.SignalBlock(self.params.sigTreeStateChanged, self.update_plots):
+            self.params['chi squared'] = self.fit.chisqr
 
-        args = self.args.copy()
-        args.update(self.fit_params())
-        fity = self.model.eval(y=self.data, **args)
-        residual = self.data - fity
-        rmse = (residual**2 / residual.size).sum() ** 0.5
-        self.params['normalized RMS error'] = rmse / self.data.std()
-        
-        r, p = scipy.stats.pearsonr(self.data, fity)
-        self.params['pearson r'] = r
-        self.params['pearson p'] = p
+            args = self.args.copy()
+            args.update(self.fit_params())
+            fity = self.model.eval(y=self.data, **args)
+            residual = self.data - fity
+            rmse = (residual**2 / residual.size).sum() ** 0.5
+            self.params['normalized RMS error'] = rmse / self.data.std()
+            
+            r, p = scipy.stats.pearsonr(self.data, fity)
+            self.params['pearson r'] = r
+            self.params['pearson p'] = p
         
     def update_plots(self):
         self.plot.clear()
@@ -135,8 +136,8 @@ class FitExplorer(QtGui.QWidget):
 
     def refit(self):
         args = self.args.copy()
-        args.update(self.constraints())
-        self.set_fit(self.model.fit(self.data, method=self.params['fit method'], **args), update_params=False)
+        params = self.constraints()
+        self.set_fit(self.model.fit(self.data, method=self.params['fit method'], params=params, **args), update_params=False)
         
     def _fill_params(self, root, fit):
         for k in self.model.param_names:

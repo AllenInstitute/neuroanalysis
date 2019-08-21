@@ -1,8 +1,8 @@
 import numpy as np
 
-from data import PatchClampRecording, Trace
-from fitting import Exp
-from stimuli import find_square_pulses
+from .data import PatchClampRecording, TSeries
+from .fitting import Exp
+from .stimuli import find_square_pulses
 
 
 class PatchClampTestPulse(PatchClampRecording):
@@ -154,7 +154,7 @@ class PatchClampTestPulse(PatchClampRecording):
         fit = result.best_values
         err = model.nrmse(result)
         
-        self.fit_trace = Trace(result.eval(), time_values=fit_region.time_values)
+        self.fit_trace = TSeries(result.eval(), time_values=fit_region.time_values)
         
         ### fit again using shorter data
         ### this should help to avoid fitting against h-currents

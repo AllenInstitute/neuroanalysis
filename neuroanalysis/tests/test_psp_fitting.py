@@ -29,7 +29,7 @@ def test_psp_fitting():
 #    for file in ['test_psp_fit/1492546902.92_2_6stacked.json']: order of parameters affects this fit
         print 'file', file
         test_dict=json.load(open(file)) # load test data
-        avg_trace=neuroanalysis.data.Trace(data=np.array(test_dict['input']['data']), dt=test_dict['input']['dt']) # create Trace object
+        avg_trace=neuroanalysis.data.TSeries(data=np.array(test_dict['input']['data']), dt=test_dict['input']['dt']) # create TSeries object
         psp_fits = fit_psp(avg_trace, 
                            xoffset=(14e-3, -float('inf'), float('inf')),
                            weight=np.array(test_dict['input']['weight']),
@@ -59,7 +59,7 @@ def check_psp_fitting():
 #    for file in ['test_psp_fit/1492546902.92_2_6stacked.json']: order of parameters affects this fit
         print 'file', file
         test_dict=json.load(open(file)) # load test data
-        avg_trace=neuroanalysis.data.Trace(data=np.array(test_dict['input']['data']), dt=test_dict['input']['dt']) # create Trace object
+        avg_trace=neuroanalysis.data.TSeries(data=np.array(test_dict['input']['data']), dt=test_dict['input']['dt']) # create TSeries object
         psp_fits = fit_psp(avg_trace, 
                            weight=np.array(test_dict['input']['weight']),
                            xoffset=(14e-3, -float('inf'), float('inf')),
@@ -123,7 +123,7 @@ def save_fit_psp_test_set():
     from manuscript_figures import get_response, get_amplitude, response_filter, feature_anova, write_cache, trace_plot, \
         colors_human, colors_mouse, fail_rate, pulse_qc, feature_kw
     from synapse_comparison import load_cache, summary_plot_pulse
-    from neuroanalysis.data import TraceList, Trace
+    from neuroanalysis.data import TSeriesList, TSeries
     from neuroanalysis.ui.plot_grid import PlotGrid
     from multipatch_analysis.connection_detection import fit_psp
     from rep_connections import ee_connections, human_connections, no_include, all_connections, ie_connections, ii_connections, ei_connections
@@ -266,7 +266,7 @@ def save_fit_psp_test_set():
                                                 'weight': weight.tolist()} 
                             
                             # need to remake trace because different output is created
-                            avg_trace_simple=Trace(data=np.array(save_dict['input']['data']), dt=save_dict['input']['dt']) # create Trace object
+                            avg_trace_simple=TSeries(data=np.array(save_dict['input']['data']), dt=save_dict['input']['dt']) # create TSeries object
                             
                             psp_fits_original = fit_psp(avg_trace, 
                                                sign=save_dict['input']['amp_sign'], 

@@ -5,7 +5,7 @@ from ..signal import SignalBlock
 
 from .sweep_view import SweepView
 from .analyzer_view import AnalyzerView
-from ...util import merge_lists
+from ...util.merge_lists import merge_lists
 
 
 class MiesNwbExplorer(QtGui.QSplitter):

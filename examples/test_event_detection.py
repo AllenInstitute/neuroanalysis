@@ -1,7 +1,7 @@
 import pyqtgraph as pg
 from pyqtgraph.Qt import QtGui, QtCore
 import numpy as np
-from neuroanalysis.data import Trace
+from neuroanalysis.data import TSeries
 from neuroanalysis.ui.event_detection import EventDetector
 from neuroanalysis.ui.plot_grid import PlotGrid
 
@@ -10,7 +10,7 @@ pg.mkQApp()
 
 data = np.load("test_data/synaptic_events/events1.npz")
 trace_names = sorted([x for x in data.keys() if x.startswith('trace')])
-traces = {n:Trace(data[n], dt=1.0/data['sample_rates'][i]) for i,n in enumerate(trace_names)}
+traces = {n:TSeries(data[n], dt=1.0/data['sample_rates'][i]) for i,n in enumerate(trace_names)}
 
 evd = EventDetector()
 evd.params['threshold'] = 5e-10

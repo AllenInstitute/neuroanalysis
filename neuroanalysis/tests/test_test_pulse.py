@@ -1,5 +1,5 @@
 import numpy as np
-from neuroanalysis.data import Recording, Trace
+from neuroanalysis.data import Recording, TSeries
 from neuroanalysis.test_pulse import PatchClampTestPulse
 from neuroanalysis.neuronsim.model_cell import ModelCell
 from neuroanalysis.units import pA, mV, MOhm, pF, us, ms
@@ -34,7 +34,7 @@ def create_test_pulse(start=5*ms, pdur=10*ms, pamp=-10*pA, mode='ic', dt=10*us, 
     pulse[pstart:pstop] = pamp
     
     # simulate response
-    result = model_cell.test(Trace(pulse, dt), mode)
+    result = model_cell.test(TSeries(pulse, dt), mode)
     
     # generate a PatchClampTestPulse to test against
     tp = PatchClampTestPulse(result)

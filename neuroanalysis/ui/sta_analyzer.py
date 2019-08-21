@@ -5,7 +5,7 @@ import pyqtgraph.parametertree as pt
 from .cell_selector import CellSelector
 from .event_detection import EventDetector
 from .triggered_average import TriggeredAverager
-from ..data import Trace
+from ..data import TSeries
 
 
 class STAAnalyzer(QtGui.QWidget):
@@ -116,7 +116,7 @@ class STAAnalyzer(QtGui.QWidget):
     def updateSpikes(self):
         cell_id = self.cell_selector.selected_id()
         self.data = self.data_set.get_dff_traces([cell_id])
-        trace = Trace(self.data[1][0], time_values=self.data[0])
+        trace = TSeries(self.data[1][0], time_values=self.data[0])
         self.events = self.spike_detector.process(trace)
         self.updateOutput()
         

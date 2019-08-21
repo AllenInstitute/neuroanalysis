@@ -1,7 +1,7 @@
 from pytest import raises
 import numpy as np
 
-from neuroanalysis.data import Trace
+from neuroanalysis.data import TSeries
 
 
 def test_trace_timing():
@@ -12,7 +12,7 @@ def test_trace_timing():
     t = np.arange(len(a)) * dt
     
     # trace with no timing information 
-    tr = Trace(a)
+    tr = TSeries(a)
     assert not tr.has_timing
     assert not tr.has_time_values
     with raises(TypeError):
@@ -34,35 +34,35 @@ def test_trace_timing():
 
     # invalid data
     with raises(ValueError):
-        Trace(data=np.zeros((10, 10)))
+        TSeries(data=np.zeros((10, 10)))
 
     # invalid timing information
     with raises(TypeError):
-        Trace(data=a, dt=dt, time_values=t)
+        TSeries(data=a, dt=dt, time_values=t)
     with raises(TypeError):
-        Trace(data=a, sample_rate=sr, time_values=t)
+        TSeries(data=a, sample_rate=sr, time_values=t)
     with raises(TypeError):
-        Trace(data=a, dt=dt, t0=0, time_values=t)
+        TSeries(data=a, dt=dt, t0=0, time_values=t)
     with raises(TypeError):
-        Trace(data=a, dt=dt, t0=0, sample_rate=sr)
+        TSeries(data=a, dt=dt, t0=0, sample_rate=sr)
     with raises(ValueError):
-        Trace(data=a, time_values=t[:-1])
+        TSeries(data=a, time_values=t[:-1])
 
     # trace with only dt
-    tr = Trace(a, dt=dt)
+    tr = TSeries(a, dt=dt)
     assert tr.dt == dt
     assert np.allclose(tr.sample_rate, sr)
     check_trace(tr, data=a, time_values=t, has_timing=True, has_time_values=False, regularly_sampled=True)
 
     # trace with only sample_rate
-    tr = Trace(a, sample_rate=sr)
+    tr = TSeries(a, sample_rate=sr)
     assert tr.dt == dt
     assert tr.sample_rate == sr
     assert np.all(tr.time_values == t)
     check_trace(tr, data=a, time_values=t, has_timing=True, has_time_values=False, regularly_sampled=True)
     
     # trace with only regularly-sampled time_values
-    tr = Trace(a, time_values=t)
+    tr = TSeries(a, time_values=t)
     assert tr.dt == dt
     assert np.allclose(tr.sample_rate, sr)
     assert np.all(tr.time_values == t)
@@ -70,7 +70,7 @@ def test_trace_timing():
 
     # trace with irregularly-sampled time values
     t1 = np.cumsum(np.random.normal(loc=1, scale=0.02, size=a.shape))
-    tr = Trace(a, time_values=t1)
+    tr = TSeries(a, time_values=t1)
     assert tr.dt == t1[1] - t1[0]
     assert np.all(tr.time_values == t1)
     check_trace(tr, data=a, time_values=t1, has_timing=True, has_time_values=True, regularly_sampled=False)

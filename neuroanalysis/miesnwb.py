@@ -4,17 +4,17 @@ from datetime import datetime
 from collections import OrderedDict
 import numpy as np
 import h5py
-
-from .data import DataSet, SyncRecording, PatchClampRecording, Trace
+from .data import Dataset, SyncRecording, PatchClampRecording, TSeries
 from .test_pulse import PatchClampTestPulse
 from . import stimuli
 
 
-class MiesNwb(DataSet):
+
+class MiesNwb(Dataset):
     """Class for accessing data from a MIES-generated NWB file.
     """
     def __init__(self, filename):
-        DataSet.__init__(self)
+        Dataset.__init__(self)
         self.filename = filename
         self._hdf = None
         self._sweeps = None
@@ -42,7 +42,7 @@ class MiesNwb(DataSet):
             # collect all lab notebook entries
             sweep_entries = OrderedDict()
             tp_entries = []
-            device = self.hdf['general/devices'].keys()[0].split('_',1)[-1]
+            device = list(self.hdf['general/devices'].keys())[0].split('_',1)[-1]
             nb_keys = self.hdf['general']['labnotebook'][device]['numericalKeys'][0]
             nb_fields = OrderedDict([(k, i) for i,k in enumerate(nb_keys)])
 
@@ -76,14 +76,14 @@ class MiesNwb(DataSet):
                     if any(np.isfinite(tp_peak)):
                         tp_dur = nb[i+1][nb_fields['TP Pulse Duration']]
                         if any(np.isfinite(tp_dur)):
-                            nb_iter.next()
+                            next(nb_iter)
                             is_tp_record = True
                     if not is_tp_record:
                         is_sweep_record = np.isfinite(sweep_num)
 
                 if is_tp_record:
                     rec = np.array(rec)
-                    nb_iter.next()
+                    next(nb_iter)
                     rec2 = np.array(nb[i+1])
                     mask = ~np.isnan(rec2)
                     rec[mask] = rec2[mask]
@@ -262,14 +262,14 @@ class MiesNwb(DataSet):
         return self._tp_entries
 
 
-class MiesTrace(Trace):
+class MiesTSeries(TSeries):
     def __init__(self, recording, chan):
         start = recording._meta['start_time']
         
         # Note: this is also available in meta()['Minimum Sampling interval'],
         # but that key is missing in some older NWB files.
         dt = recording.primary_hdf.attrs['IGORWaveScaling'][1,0] / 1000.
-        Trace.__init__(self, recording=recording, channel_id=chan, dt=dt, start_time=start)
+        TSeries.__init__(self, recording=recording, channel_id=chan, dt=dt, start_time=start)
     
     @property
     def data(self):
@@ -319,7 +319,7 @@ class MiesRecording(PatchClampRecording):
         self._hdf_group_name = sweep._channel_keys[ad_chan]['hdf_group_name']
         self._hdf_group = None
         self._da_chan = None
-        headstage_id = int(self.hdf_group['electrode_name'].value[0].split('_')[1])
+        headstage_id = int(self.hdf_group['electrode_name'][()][0].split('_')[1])
         
         PatchClampRecording.__init__(self, device_type='MultiClamp 700', device_id=headstage_id,
                                      sync_recording=sweep)
@@ -349,8 +349,8 @@ class MiesRecording(PatchClampRecording):
         datetime = MiesNwb.igorpro_date(nb['TimeStamp'])
         self.meta['start_time'] = datetime
 
-        self._channels['primary'] = MiesTrace(self, 'primary')
-        self._channels['command'] = MiesTrace(self, 'command')
+        self._channels['primary'] = MiesTSeries(self, 'primary')
+        self._channels['command'] = MiesTSeries(self, 'command')
 
     @property
     def stimulus(self):
@@ -460,20 +460,19 @@ class MiesRecording(PatchClampRecording):
 
     @property
     def baseline_regions(self):
-        """A list of (start, stop) index pairs that cover regions of the recording
+        """A list of (start, stop) time pairs that cover regions of the recording
         the cell is expected to be in a steady state.
         """
         pri = self['primary']
-        dt = pri.dt
         regions = []
         start = self.meta['notebook']['Delay onset auto'] / 1000.  # duration of test pulse
         dur = self.meta['notebook']['Delay onset user'] / 1000.  # duration of baseline
         if dur > 0:
-            regions.append((int(start/dt), int(start+dur/dt)))
+            regions.append((start, start+dur))
            
         dur = self.meta['notebook']['Delay termination'] / 1000.
         if dur > 0:
-            regions.append((-int(dur/dt), None))
+            regions.append((pri.t_end-dur, pri.t_end))
             
         return regions
 
@@ -484,7 +483,7 @@ class MiesRecording(PatchClampRecording):
             hdf = self._nwb.hdf['stimulus/presentation']
             stims = [k for k in hdf.keys() if k.startswith('data_%05d_'%self._trace_id[0])]
             for s in stims:
-                elec = hdf[s]['electrode_name'].value[0]
+                elec = hdf[s]['electrode_name'][()][0]
                 if elec == 'electrode_%d' % self.device_id:
                     self._da_chan = int(s.split('_')[-1][2:])
             if self._da_chan is None:
@@ -630,7 +629,7 @@ class MiesStimulus(stimuli.Stimulus):
     """
     def __init__(self, recording):
         self._recording = recording
-        stim_name = recording.hdf_group['stimulus_description'].value[0]
+        stim_name = recording.hdf_group['stimulus_description'][()][0]
         stimuli.Stimulus.__init__(self, description=stim_name)
         self._items = None
 

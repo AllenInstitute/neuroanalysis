@@ -81,7 +81,7 @@ class EventDetector(QtCore.QObject):
         
         Parameters
         ----------
-        trace : data.Trace instance
+        trace : data.TSeries instance
             Signal values to process for events (for example, a single calcium
             signal trace or a single electrode recording).
         show : bool

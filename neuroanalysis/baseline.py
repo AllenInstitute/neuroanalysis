@@ -8,22 +8,17 @@ import numpy as np
 import scipy.stats, scipy.signal
 
     
-def adaptive_detrend(data, x=None, threshold=3.0):
+def adaptive_detrend(data, window=(None, None), threshold=3.0):
     """Linear detrend where the baseline is estimated excluding outliers."""
-    if x is None:
-        x = data.xvals(0)
-    
-    d = data.view(ndarray)
-    
-    d2 = scipy.signal.detrend(d)
-    
+    inds = np.arange(len(data))
+    chunk = data[slice(*window)]
+    chunk_inds = inds[slice(*window)]
+    d2 = scipy.signal.detrend(chunk)    
     stdev = d2.std()
     mask = abs(d2) < stdev*threshold
-    
-    lr = scipy.stats.linregress(x[mask], d[mask])
-    base = lr[1] + lr[0]*x
-    d4 = d - base
-    
+    lr = scipy.stats.linregress(chunk_inds[mask], d2[mask])
+    base = lr[1] + lr[0]*inds
+    d4 = data - base    
     return d4
     
 

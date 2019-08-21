@@ -3,7 +3,7 @@ import scipy.ndimage as ndi
 import pyqtgraph as pg
 from neuroanalysis.ui.plot_grid import PlotGrid
 from neuroanalysis.spike_detection import detect_vc_evoked_spike
-from neuroanalysis.data import Trace
+from neuroanalysis.data import TSeries
 
 
 # Load test data
@@ -60,7 +60,7 @@ for i in range(data.shape[0]):
     for j in range(8):  # loop over pulses
         pstart = on_times[j+1] - start
         pstop = off_times[j+1] - start
-        spike_info = detect_vc_evoked_spike(Trace(chunk, dt=dt), pulse_edges=(pstart, pstop))
+        spike_info = detect_vc_evoked_spike(TSeries(chunk, dt=dt), pulse_edges=(pstart, pstop))
         if spike_info is not None:
             peak_inds.append(spike_info['peak_index'])
             rise_inds.append(spike_info['rise_index'])

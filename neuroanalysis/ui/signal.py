@@ -12,7 +12,7 @@ def disconnect(signal, slot):
     try:
         signal.disconnect(slot)
         return True
-    except TypeError, RuntimeError:
+    except (TypeError, RuntimeError):
         return False
 
 

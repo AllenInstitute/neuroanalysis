@@ -20,7 +20,7 @@ def load_nwb(filename):
 if len(sys.argv) > 1:
     arg = sys.argv[1]
     if not os.path.exists(arg):
-        print "Could not find %s" % arg
+        print("Could not find %s" % arg)
         sys.exit(-1)
     else:
         load_nwb(arg)
