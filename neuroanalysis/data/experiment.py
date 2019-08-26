@@ -44,6 +44,7 @@ class Experiment(object):
         self._mosaic_file = None
         #self._nwb_file = None ## name should change
         self._ephys_file = None
+        self._connections_file = None
         #self._data = None
         #self._stim_list = None
         #self._genotype = None
@@ -730,6 +731,13 @@ class Experiment(object):
     def pipette_file(self):
         """Return a pipettes.yml file for this experiment (or None)."""
         return self.library.pipette_file(self)
+
+    @property
+    def connections_file(self):
+        """Return connections.json for this experiment (or None)."""
+        if self._connections_file is None:
+            self._connections_file = self.library.get_connections_file(self)
+        return self._connections_file
 
     @property
     def path(self):
