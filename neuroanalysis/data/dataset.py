@@ -21,9 +21,9 @@ import numpy as np
 import scipy.signal
 from .. import util
 from collections import OrderedDict
-from .stats import ragged_mean
-from .baseline import float_mode
-from .filter import downsample
+from ..stats import ragged_mean
+from ..baseline import float_mode
+from ..filter import downsample
 
 
 class Container(object):
