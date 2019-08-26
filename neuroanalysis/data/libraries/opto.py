@@ -30,7 +30,7 @@ def get_slice_info(expt):
     """Return a dict with info from the .index file for this experiment's slice."""
     index = os.path.join(os.path.split(expt.path)[0], '.index')
     if not os.path.isfile(index):
-        return None
+        return {}
     return pg.configfile.readConfigFile(index)['.']
 
 
@@ -60,6 +60,7 @@ def last_modification_time(expt):
         expt.pipette_file,
         expt.nwb_file,
         expt.mosaic_file,
+        expt.connections_file,
         os.path.join(expt.path, '.index'),
         os.path.join(os.path.split(expt.path)[0], '.index'), ## slice path
         os.path.join(os.path.split(os.path.split(expt.path)[0])[0], '.index'), ## expt_path
@@ -105,6 +106,8 @@ def get_ephys_file(expt):
     return ephys_file
 
 def get_mosaic_file(expt):
+    if not os.path.exists(expt.path):
+        return None
     sitefile = os.path.join(expt.path, "site.mosaic")
     if not os.path.isfile(sitefile):
         sitefile = os.path.join(os.path.split(expt.path)[0], "site.mosaic")
@@ -130,6 +133,7 @@ def load_from_file(expt, file_path):
     filename = os.path.basename(file_path)
     expt._uid=filename[0:-17]
     expt.source_id = (filename, None)
+    expt._connections_file = file_path
 
     with open(file_path,'r') as f:
         exp_json=json.load(f)
@@ -141,7 +145,7 @@ def load_from_file(expt, file_path):
         load_mosaiceditor_connection_file(expt, exp_json)
 
 def load_from_site_path(expt, site_path):
-    cnx_file = get_connections_file(expt.path)
+    cnx_file = get_connections_file(expt, expt.path)
     #print("attempting to load ", cnx_file)
     load_from_file(expt, cnx_file)
 
@@ -329,9 +333,9 @@ def populate_connection_calls(expt, exp_json):
             #print("Could not find connection call for Pair %s -> %s in experiment %s" % (p.preCell.cell_id, p.postCell.cell_id, expt.uid))
 
 
-def get_connections_file(site_path):
+def get_connections_file(expt, site_path):
     cnx_files = sorted(glob.glob(os.path.join(site_path, '*connections*.json')))
-    print('cnx_files:', cnx_files, "path:", site_path)
+    #print('cnx_files:', cnx_files, "path:", site_path)
     if len(cnx_files) == 1:
         return cnx_files[0]
     elif len(cnx_files) == 0:
