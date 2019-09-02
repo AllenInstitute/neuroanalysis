@@ -28,6 +28,8 @@ class Cell(object):
         self.position = None
         self._target_layer = None
         self._percent_depth = None
+        self._distance_to_pia = None
+        self._distance_to_wm = None
         self._is_excitatory = None
         self._cre_type = None
         self.has_readout = None ## should be set to True if we can have info about this cells postsynaptic activity, False if we don't
@@ -138,6 +140,15 @@ class Cell(object):
     def percent_depth(self):
         """Columnar depth where 0 is the top of the pia, and 1 is the bottom of L6."""
         return self._percent_depth
+
+    @property
+    def distance_to_pia(self):
+        """Distance (in m) from the cell to the pial surface."""
+        return self._distance_to_pia
+
+    @property
+    def distance_to_wm(self):
+        return self._distance_to_wm
 
     @property
     def is_excitatory(self):
