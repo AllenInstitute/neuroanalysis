@@ -347,7 +347,27 @@ def get_connections_file(expt, site_path):
     elif len(cnx_files) == 0:
         raise Exception("Could not find a connections file.")
     else:
-        raise Exception("Need to implement choosing which file to load. Options are %s" %str(cnx_files))
+        ### return the file with the highest version number. If there's still more than one return the file with the latest modification time
+        max_version = 0
+        cnx_file = [cnx_files[0]]
+        for f in cnx_files:
+            with open(f, 'r') as f2:
+                exp_json = json.load(f2)
+            version = exp_json.get('version', 0)
+            if version > max_version:
+                max_version = version
+                cnx_file = [f]
+            elif version == max_version:
+                cnx_file.append(f)
+
+        if len(cnx_file) == 1:
+            return cnx_file[0]
+        else:
+            mts = map(os.path.getmtime, cnx_file)
+            i = mts.index(max(mts))
+            return cnx_file[i]
+
+        #raise Exception("Need to implement choosing which file to load. Options are %s" %str(cnx_files))
             
     
 def cortical_site_info(expt):
