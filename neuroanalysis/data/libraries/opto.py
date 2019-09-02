@@ -131,7 +131,7 @@ def load_from_file(expt, file_path):
     expt._cells = OrderedDict()
 
     filename = os.path.basename(file_path)
-    expt._uid=filename[0:-17]
+    expt._uid=filename.split('_connections')[0]
     expt.source_id = (filename, None)
     expt._connections_file = file_path
 
