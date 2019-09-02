@@ -53,6 +53,7 @@ class Experiment(object):
         #self._target_layers = None
         self._rig_name = None
         self._uid = None
+        self._cortical_site_info = None # a dictionary with positions of pia, wm and layer boundaries
 
         if site_path is not None:
             self.load_from_site_path(site_path)
@@ -1079,6 +1080,13 @@ class Experiment(object):
         """The name of the project to which this experiment belongs.
         """
         return self.slice_info.get('project', None)
+
+    @property
+    def cortical_site_info(self):
+        if self._cortical_site_info is None:
+            self._cortical_site_info = self.library.cortical_site_info(self)
+        return self._cortical_site_info
+
 
     def show(self):
         if self._view is None:

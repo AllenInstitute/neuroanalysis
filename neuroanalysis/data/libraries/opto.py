@@ -173,8 +173,8 @@ def process_meta_info(expt, meta_info):
             dist = [e for e in meta_info.get('distances') if e.get('headstage')==n]
             if len(dist) > 1:
                 raise Exception('Something is wrong.')
-            cell.distance_to_pia = float(dist[0]['toPia'])*1e-6
-            cell.distance_to_WM = float(dist[0]['toWM'])*1e-6
+            cell._distance_to_pia = float(dist[0]['toPia'])*1e-6
+            cell._distance_to_wm = float(dist[0]['toWM'])*1e-6
 
 
     for i, cell in expt.cells.items():
@@ -312,6 +312,12 @@ def load_mosaiceditor_connection_file(expt, exp_json):
         cell._percent_depth = data.get('percent_depth')
         expt._cells[cell.cell_id] = cell
 
+    d = expt.cortical_site_info.get('pia_to_wm_distance')
+    if d is not None:
+        for cell in expt.cells.values():
+            if cell.percent_depth is not None:
+                cell._distance_to_pia = cell.percent_depth * d
+                cell._distance_to_wm = (1-cell.percent_depth) * d
 
     # ## populate pair values
     # for p in expt.pairs.values():
@@ -344,5 +350,21 @@ def get_connections_file(expt, site_path):
         raise Exception("Need to implement choosing which file to load. Options are %s" %str(cnx_files))
             
     
+def cortical_site_info(expt):
+    with open(expt.connections_file,'r') as f:
+        exp_json=json.load(f)
+    version = exp_json.get('version', None)
+
+    if version >= 3:
+        return exp_json['CortexMarker']
+
+    else:
+        return {}
+
+
+
+
+
+
 
 
