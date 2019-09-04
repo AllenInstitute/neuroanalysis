@@ -56,29 +56,45 @@ class Experiment(object):
         self._uid = None
         self._cortical_site_info = None # a dictionary with positions of pia, wm and layer boundaries
 
-        if site_path is not None:
-            self.load_from_site_path(site_path)
-        elif load_file is not None:
-            self.load_from_file(load_file)
+        #if site_path is not None:
+        #    self.load_from_site_path(site_path)
+        #elif load_file is not None:
+        #    self.load_from_file(load_file)
+        #else:
+        #    raise Exception("Not sure how to load experiment, neither load_file or site_path were specified.")
+
+        #if meta_info is not None:
+        #    self.process_meta_info(meta_info)
+        self._load_file = load_file
+        self._meta_info = meta_info
+        self._loaded = False
+
+        if self._site_path is not None:
+            self._load_file = self.connections_file
         else:
-            raise Exception("Not sure how to load experiment, neither load_file or site_path were specified.")
+            self._connections_file = self._load_file
 
-        if meta_info is not None:
-            self.process_meta_info(meta_info)
+        filename = os.path.basename(self.connections_file)
+        self._uid=filename.split('_connections')[0]
+        #expt.source_id = (filename, None)
 
-    def load_from_file(self, load_file_path):
-        """Initialize this Experiment from the given file. Should populate:
+    def _load(self):
+        if not self._loaded:
+            self.library.load_from_file(self)
+            
+    # def load_from_file(self, load_file_path):
+    #     """Initialize this Experiment from the given file. Should populate:
 
-        """
-        self.library.load_from_file(self, load_file_path)
+    #     """
+    #     self.library.load_from_file(self, load_file_path)
 
-    def load_from_site_path(self, path):
-        self.library.load_from_site_path(self, path)
+    # def load_from_site_path(self, path):
+    #     self.library.load_from_site_path(self, path)
 
-    def process_meta_info(self, meta_info):
-        """Process an optional meta_info dictionary that is passed in upon
-        initialization. This is called after load_from_file."""
-        self.library.process_meta_info(self, meta_info)
+    # def process_meta_info(self, meta_info):
+    #     """Process an optional meta_info dictionary that is passed in upon
+    #     initialization. This is called after load_from_file."""
+    #     self.library.process_meta_info(self, meta_info)
 
     @property
     def uid(self):
@@ -245,7 +261,8 @@ class Experiment(object):
     @property
     def cells(self):
         if self._cells is None:
-            self._cells = self.library.get_cells(self)
+            self._load()
+            #self._cells = self.library.get_cells(self)
             #if self.electrodes is None:
             #    return None
             #self._cells = {e.cell.cell_id:e.cell for e in self.electrodes.values() if e.cell is not None}

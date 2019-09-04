@@ -121,19 +121,21 @@ def get_mosaic_file(expt):
         return None
     return sitefile
 
-def load_from_file(expt, file_path):
+
+def load_from_file(expt):
     """First function that is called during expt initialization. Load information from the file at file_path
     to populate fields in expt. Must populate: electrodes, _cells
 
     For opto, file_path leads to a connections.json file. A file from either acq4's mosaic editor or new_test_ui.py is accepted.
     """
+    file_path = expt._load_file
     expt.electrodes = OrderedDict()
     expt._cells = OrderedDict()
 
     filename = os.path.basename(file_path)
-    expt._uid=filename.split('_connections')[0]
+    #expt._uid=filename.split('_connections')[0]
     expt.source_id = (filename, None)
-    expt._connections_file = file_path
+    #expt._connections_file = file_path
 
     #with open(file_path,'r') as f:
     #    exp_json=json.load(f)
@@ -144,27 +146,28 @@ def load_from_file(expt, file_path):
     else:
         load_mosaiceditor_connection_file(expt)
 
-def load_from_site_path(expt, site_path):
-    cnx_file = get_connections_file(expt, expt.path)
-    #print("attempting to load ", cnx_file)
-    load_from_file(expt, cnx_file)
+    process_meta_info(expt)
 
-    
-
-
+#def load_from_site_path(expt):
+#    cnx_file = get_connections_file(expt)
+#    #print("attempting to load ", cnx_file)
+#    load_from_file(expt, cnx_file)
 
 
-def process_meta_info(expt, meta_info):
+def process_meta_info(expt):
     """Process optional meta_info dict that is passed in at the initialization of expt.
-    Called after load_from_file."""
+    """
     ## Need to load: presynapticCre, presynapticEffector, [class, reporter, layer for each headstage], internal
+    meta_info = expt._meta_info
 
     preEffector = meta_info.get('presynapticEffector', '').lower()
     for e_id, elec in expt.electrodes.items():
         n = e_id[-1]
         cell = elec.cell
-        cell._morphology['initial_call'] = meta_info.get('HS%s_class'%n)
-        cell._target_layer = meta_info.get('HS%s_layer'%n)
+        if cell._morphology.get('initial_call') is None:
+            cell._morphology['initial_call'] = meta_info.get('HS%s_class'%n)
+        if cell._target_layer is None:
+            cell._target_layer = meta_info.get('HS%s_layer'%n)
         if meta_info.get('HS%s_reporter'%n, '').lower() == 'positive':
             cell._cre_type = meta_info.get('presynapticCre','').lower()
         label_cell(cell, preEffector, meta_info.get('HS%s_reporter'%n, '').lower() == 'positive')
@@ -173,8 +176,10 @@ def process_meta_info(expt, meta_info):
             dist = [e for e in meta_info.get('distances') if e.get('headstage')==n]
             if len(dist) > 1:
                 raise Exception('Something is wrong.')
-            cell._distance_to_pia = float(dist[0]['toPia'])*1e-6
-            cell._distance_to_wm = float(dist[0]['toWM'])*1e-6
+            if cell._distance_to_pia is None:
+                cell._distance_to_pia = float(dist[0]['toPia'])*1e-6
+            if cell._distance_to_wm is None:
+                cell._distance_to_wm = float(dist[0]['toWM'])*1e-6
 
 
     for i, cell in expt.cells.items():
@@ -301,6 +306,8 @@ def load_mosaiceditor_connection_file(expt):
             cell.has_stimulation = True
             cell._target_layer = data.get('target_layer')
             cell._percent_depth = data.get('percent_depth')
+            cell._distance_to_pia = data.get('distance_to_pia')
+            cell._distance_to_wm = data.get('distance_to_wm')
             expt._cells[cell.cell_id] = cell
 
     ## create Cells for recorded cells
@@ -315,14 +322,16 @@ def load_mosaiceditor_connection_file(expt):
         cell.has_stimulation = True
         cell._target_layer = data.get('target_layer')
         cell._percent_depth = data.get('percent_depth')
+        cell._distance_to_pia = data.get('distance_to_pia')
+        cell._distance_to_wm = data.get('distance_to_wm')
         expt._cells[cell.cell_id] = cell
 
-    d = expt.cortical_site_info.get('pia_to_wm_distance')
-    if d is not None:
-        for cell in expt.cells.values():
-            if cell.percent_depth is not None:
-                cell._distance_to_pia = cell.percent_depth * d
-                cell._distance_to_wm = (1-cell.percent_depth) * d
+    #d = expt.cortical_site_info.get('pia_to_wm_distance')
+    #if d is not None:
+    #    for cell in expt.cells.values():
+    #        if cell.percent_depth is not None:
+    #            cell._distance_to_pia = cell.percent_depth * d
+    #            cell._distance_to_wm = (1-cell.percent_depth) * d
 
     # ## populate pair values
     # for p in expt.pairs.values():
@@ -344,8 +353,8 @@ def populate_connection_calls(expt, exp_json):
             #print("Could not find connection call for Pair %s -> %s in experiment %s" % (p.preCell.cell_id, p.postCell.cell_id, expt.uid))
 
 
-def get_connections_file(expt, site_path):
-    cnx_files = sorted(glob.glob(os.path.join(site_path, '*connections*.json')))
+def get_connections_file(expt):
+    cnx_files = sorted(glob.glob(os.path.join(expt._site_path, '*connections*.json')))
     #print('cnx_files:', cnx_files, "path:", site_path)
     if len(cnx_files) == 1:
         return cnx_files[0]
