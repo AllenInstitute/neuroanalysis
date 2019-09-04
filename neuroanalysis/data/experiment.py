@@ -45,6 +45,7 @@ class Experiment(object):
         #self._nwb_file = None ## name should change
         self._ephys_file = None
         self._connections_file = None
+        self._connections_file_version = None ## save connections file version so we don't need to read the file every time we need to check the version
         #self._data = None
         #self._stim_list = None
         #self._genotype = None
@@ -739,6 +740,13 @@ class Experiment(object):
         if self._connections_file is None:
             self._connections_file = self.library.get_connections_file(self)
         return self._connections_file
+
+    @property
+    def connections_file_version(self):
+        if self._connections_file_version is None:
+            self._connections_file_version = self.library.get_connections_file_version(self)
+        return self._connections_file_version
+
 
     @property
     def path(self):

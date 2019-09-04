@@ -135,14 +135,14 @@ def load_from_file(expt, file_path):
     expt.source_id = (filename, None)
     expt._connections_file = file_path
 
-    with open(file_path,'r') as f:
-        exp_json=json.load(f)
-    version = exp_json.get('version', None)
+    #with open(file_path,'r') as f:
+    #    exp_json=json.load(f)
+    #version = exp_json.get('version', None)
 
-    if version is None:
-        load_markPoints_connection_file(expt, exp_json)
+    if expt.connections_file_version == 0:
+        load_markPoints_connection_file(expt)
     else:
-        load_mosaiceditor_connection_file(expt, exp_json)
+        load_mosaiceditor_connection_file(expt)
 
 def load_from_site_path(expt, site_path):
     cnx_file = get_connections_file(expt, expt.path)
@@ -214,7 +214,9 @@ def label_cell(cell, preEffector, positive=True):
             cell.labels['AF594'] = True
 
 
-def load_markPoints_connection_file(expt, exp_json):
+def load_markPoints_connection_file(expt):
+    with open(expt.connections_file, 'r') as f:
+        exp_json = json.load(f)
 
     ## load stim point positions
     tseries_keys=[key for key in exp_json.keys() if 'TSeries' in key]
@@ -286,7 +288,10 @@ def load_markPoints_connection_file(expt, exp_json):
     populate_connection_calls(expt, exp_json)
 
 
-def load_mosaiceditor_connection_file(expt, exp_json):
+def load_mosaiceditor_connection_file(expt):
+    with open(expt.connections_file, 'r') as f:
+        exp_json = json.load(f)
+
     ## create Cells for stimulation points
     for name, data in exp_json['StimulationPoints'].items():
         if data['onCell']:
@@ -368,14 +373,21 @@ def get_connections_file(expt, site_path):
             return cnx_file[i]
 
         #raise Exception("Need to implement choosing which file to load. Options are %s" %str(cnx_files))
+
+def get_connections_file_version(expt):
+    with open(expt.connections_file, 'r') as f:
+        exp_json = json.load(f)
+    return exp_json.get('version', 0)
             
     
 def cortical_site_info(expt):
-    with open(expt.connections_file,'r') as f:
-        exp_json=json.load(f)
-    version = exp_json.get('version', None)
+    #with open(expt.connections_file,'r') as f:
+    #    exp_json=json.load(f)
+    #version = exp_json.get('version', None)
 
-    if version >= 3:
+    if expt.connections_file_version >= 3:
+        with open(expt.connections_file,'r') as f:
+           exp_json=json.load(f)
         return exp_json['CortexMarker']
 
     else:
