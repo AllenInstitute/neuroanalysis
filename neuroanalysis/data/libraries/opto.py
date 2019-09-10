@@ -174,20 +174,21 @@ def process_meta_info(expt):
         elec._internal_solution = meta_info.get('internal', '').lower()
         if len(meta_info.get('distances', [])) > 0: ### we may not have distance measurements for all cells
             dist = [e for e in meta_info.get('distances') if e.get('headstage')==n]
-            if len(dist) > 1:
+            if len(dist) == 1:
+                if cell._distance_to_pia is None:
+                    try:
+                        cell._distance_to_pia = float(dist[0]['toPia'])*1e-6
+                    except ValueError:
+                        if dist[0]['toPia'] != '':
+                            raise
+                if cell._distance_to_wm is None:
+                    try:
+                        cell._distance_to_wm = float(dist[0]['toWM'])*1e-6
+                    except ValueError:
+                        if dist[0]['toWM'] != '':
+                            raise
+            elif len(dist) > 1:
                 raise Exception('Something is wrong.')
-            if cell._distance_to_pia is None:
-                try:
-                    cell._distance_to_pia = float(dist[0]['toPia'])*1e-6
-                except ValueError:
-                    if dist[0]['toPia'] != '':
-                        raise
-            if cell._distance_to_wm is None:
-                try:
-                    cell._distance_to_wm = float(dist[0]['toWM'])*1e-6
-                except ValueError:
-                    if dist[0]['toWM'] != '':
-                        raise
         if cell._percent_depth is None and cell._distance_to_pia is not None and cell._distance_to_wm is not None:
             cell._percent_depth = cell._distance_to_pia/(cell._distance_to_pia + cell._distance_to_wm)
 
