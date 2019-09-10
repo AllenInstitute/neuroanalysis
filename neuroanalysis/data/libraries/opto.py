@@ -179,8 +179,13 @@ def process_meta_info(expt):
             if cell._distance_to_pia is None:
                 cell._distance_to_pia = float(dist[0]['toPia'])*1e-6
             if cell._distance_to_wm is None:
-                cell._distance_to_wm = float(dist[0]['toWM'])*1e-6
-
+                try:
+                    cell._distance_to_wm = float(dist[0]['toWM'])*1e-6
+                except ValueError:
+                    if dist[0]['toWM'] != '':
+                        raise
+        if cell._percent_depth is None and cell._distance_to_pia is not None and cell._distance_to_wm is not None:
+            cell._percent_depth = cell._distance_to_pia/(cell._distance_to_pia + cell._distance_to_wm)
 
     for i, cell in expt.cells.items():
         if not cell.has_readout and cell.has_stimulation:
