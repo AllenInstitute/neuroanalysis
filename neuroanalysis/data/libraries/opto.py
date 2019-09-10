@@ -177,7 +177,11 @@ def process_meta_info(expt):
             if len(dist) > 1:
                 raise Exception('Something is wrong.')
             if cell._distance_to_pia is None:
-                cell._distance_to_pia = float(dist[0]['toPia'])*1e-6
+                try:
+                    cell._distance_to_pia = float(dist[0]['toPia'])*1e-6
+                except ValueError:
+                    if dist[0]['toPia'] != '':
+                        raise
             if cell._distance_to_wm is None:
                 try:
                     cell._distance_to_wm = float(dist[0]['toWM'])*1e-6
