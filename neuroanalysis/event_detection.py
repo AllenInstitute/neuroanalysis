@@ -107,26 +107,32 @@ def threshold_events(trace, threshold, adjust_times=True, baseline=0.0, omit_end
     #if (hasattr(data, 'implements') and data.implements('MetaArray')):
     
     ## find all threshold crossings
-    masks = [(data1 > threshold).astype(np.byte), (data1 < -threshold).astype(np.byte)]
     hits = []
-    for mask in masks:
-        diff = mask[1:] - mask[:-1]
+    for signed_threshold in (-threshold, threshold):
+        if signed_threshold < 0:
+            mask = data1 < signed_threshold
+        else:
+            mask = data1 > signed_threshold
+        
+        imask = mask.astype('byte')
+        diff = imask[1:] - imask[:-1]
         on_inds = list(np.argwhere(diff==1)[:,0] + 1)
         off_inds = list(np.argwhere(diff==-1)[:,0] + 1)
-        if len(on_inds) == 0 and len(off_inds) == 0:
-            continue
-        if len(on_inds) == 0 or off_inds[0] < on_inds[0]:
-            if omit_ends:
+        
+        if omit_ends:
+            if mask[0]:
                 off_inds = off_inds[1:]
-                if len(off_inds) == 0:
-                    continue
-            else:
-                on_inds.insert(0, 0)
-        if len(off_inds) == 0 or off_inds[-1] < on_inds[-1]:
-            if omit_ends:
+            if mask[-1]:
                 on_inds = on_inds[:-1]
-            else:
-                off_inds.append(len(diff))
+        else:
+            if mask[0]:
+                on_inds.insert(0, 0)
+            if mask[-1]:
+                off_inds.append(len(mask))
+
+        if len(on_inds) == 0:
+            continue
+        
         for i in range(len(on_inds)):
             if on_inds[i] == off_inds[i]:
                 continue

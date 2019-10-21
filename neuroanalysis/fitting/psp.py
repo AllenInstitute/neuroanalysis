@@ -1,8 +1,12 @@
 from __future__ import print_function, division
 
+import sys, json, warnings
 import numpy as np
 import scipy.optimize
+from ..data import Trace
+from ..util.data_test import DataTestCase
 from .fitmodel import FitModel
+from .searchfit import SearchFit
 
 
 class Psp(FitModel):
@@ -33,22 +37,6 @@ class Psp(FitModel):
     This provides a flatter error surface to fit against, avoiding some of the
     tradeoff between parameters that Exp2 suffers from.
     """
-    # default guess / bounds:
-
-    # if guess is None:
-    #     guess = [
-    #         (y.max()-y.min()) * 2,
-    #         0, 
-    #         x[-1]*0.25,
-    #         x[-1]
-    #     ]
-    
-    # if bounds is None:
-    #     bounds = [[None,None]] * 4
-    #     bounds[1][0] = -2e-3
-    #     minTau = (x[1]-x[0]) * 0.5
-    #     #bounds[2] = [minTau, None]
-    #     #bounds[3] = [minTau, None]
 
     def __init__(self):
         FitModel.__init__(self, self.psp_func, independent_vars=['x'])
@@ -65,10 +53,8 @@ class Psp(FitModel):
     @staticmethod
     def psp_func(x, xoffset, yoffset, rise_time, decay_tau, amp, rise_power):
         """Function approximating a PSP shape. 
-
         """
         rise_tau = Psp._compute_rise_tau(rise_time, rise_power, decay_tau)
-        #decay_tau = (rise_tau / rise_power) * (np.exp(rise_time / rise_tau) - 1)
         max_val = Psp._psp_inner(rise_time, rise_tau, decay_tau, rise_power)
         
         xoff = x - xoffset
@@ -90,17 +76,18 @@ class Psp(FitModel):
 class StackedPsp(FitModel):
     """A PSP on top of an exponential decay.
     
-    Parameters are the same as for Psp, with the addition of *exp_amp*, which
-    is the amplitude of the underlying exponential decay at the onset of the
-    psp.
+    Parameters are the same as for Psp, with the addition of *exp_amp* and *exp_tau*,
+    which describe the baseline exponential decay.
     """
     def __init__(self):
         FitModel.__init__(self, self.stacked_psp_func, independent_vars=['x'])
     
     @staticmethod
-    def stacked_psp_func(x, xoffset, yoffset, rise_time, decay_tau, amp, rise_power, exp_amp):
-        exp = exp_amp * np.exp(-(x-xoffset) / decay_tau)
-        return exp + Psp.psp_func(x, xoffset, yoffset, rise_time, decay_tau, amp, rise_power)
+    def stacked_psp_func(x, xoffset, yoffset, rise_time, decay_tau, amp, rise_power, exp_amp, exp_tau):
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")    
+            exp = exp_amp * np.exp(-(x-xoffset) / exp_tau)
+            return exp + Psp.psp_func(x, xoffset, yoffset, rise_time, decay_tau, amp, rise_power)
 
 
 class PspTrain(FitModel):
@@ -140,7 +127,6 @@ class PspTrain(FitModel):
         return tot + yoffset
 
 
-
 class Psp2(FitModel):
     """PSP-like fitting model with double-exponential decay.
     
@@ -169,221 +155,251 @@ class Psp2(FitModel):
         return out
 
 
-def create_all_fit_param_combos(base_params):
-    '''Convert the parameters fed to fit_psp into a list of all possible parameter 
-    dictionaries to be fed to PSP() or stackedPSP() for fitting. 
+def fit_psp(data, search_window, clamp_mode, sign=0, exp_baseline=True, baseline_like_psp=False, refine=True, init_params=None, fit_kws=None, ui=None):
+    """Fit a Trace instance to a StackedPsp model.
     
-    Parameters 
-    ----------
-    base_params: dictionary
-        Each value in the key:value dictionary pair must be a tuple.
-        In general the structure of the tuple is of the form, 
-        (initial conditions, lower boundary, higher boundary).
-        The initial conditions can be either a number or a list 
-        of numbers specifying several initial conditions.  The 
-        initial condition may also be fixed by replacing the lower 
-        higher boundary combination with 'fixed'.
-        Note that technically the value of a key:value pair could 
-        be a single string (this ends up being evaluated as an 
-        expression by lmfit later on).
-    
-    Returns
-    -------
-    param_dict_list: list of dictionaries
-        Each dictionary contains parameter inputs for one fit_psp run.
-        
-    Examples:    
-    base_params[amplitude]=(10, 0, 20)
-    base_params[amplitude]=(10, 'fixed')
-    base_params[amplitude]=([5,10, 20], 0, 20)
-    base_params[amplitude]=([5,10, 20], 'fixed')
-    
-    '''
-    # need to create all combinations of the initial conditions
-    param_dict_list = [{}] #initialize list
-    for key, value in base_params.items():
-        if isinstance(value[0], list):
-            temp_list=[]
-            for init_cond in value[0]: #for each initial condition
-                temp=[pdl.copy() for pdl in param_dict_list] #copy each parameter dictionary in the list so they do not point back to the original dictionary
-                for t in temp:  #for each dictionary in the list 
-                    t[key]=tuple([init_cond] +list(value[1:])) #add the key and single initial condition pair
-                temp_list=temp_list+temp
-            param_dict_list=list(temp_list) #Note this works because the dictionaries are already made immutable above
-        else: 
-            for pdl in param_dict_list:
-                pdl[key]=value
-    
-    return param_dict_list
-
-
-def fit_psp(response, 
-            xoffset, # this parameter will be fit.
-            clamp_mode='ic', 
-            sign='any', #Note this will not be used if *amp* input is specified
-            method='leastsq', 
-            fit_kws=None, 
-            stacked=True,
-            rise_time_mult_factor=10., #Note this will not be used if *rise_time* input is specified 
-            weight=None,
-            amp_ratio=None, 
-            # the following are parameters that can be fit 
-            amp=None,
-            decay_tau=None,
-            rise_power=None,
-            rise_time=None,
-            yoffset=None
-            ):
-    """Fit psp waveform to the equation specified in the PSP class in neuroanalysis.fitting
+    This function is a higher-level interface to StackedPsp.fit:    
+    * Makes some assumptions about typical PSP/PSC properties based on the clamp mode
+    * Uses SearchFit to find a better fit over a wide search window, and to avoid
+      common local-minimum traps.
 
     Parameters
     ----------
-    response : neuroanalysis.data.TSeries class
+    data : neuroanalysis.data.TSeries instance
         Contains data on trace waveform.
+    search_window : tuple
+        start, stop range over which to search for PSP onset.
     clamp_mode : string
         either 'ic' for current clamp or 'vc' for voltage clamp
-    sign : string
-        Specifies the sign of the PSP deflection.  Must be '+', '-', or any. If *amp* 
-        is specified, value will be irrelevant.
-    method : string 
-        Method lmfit uses for optimization
-    rise_time_mult_factor: float
-        Parameter that goes into the default calculation rise time.  
-        Note that if an input for *rise_time* is provided this input
-        will be irrelevant.
-    stacked : True or False
-        If True, use the :class:`StackedPsp` model function. This model fits
-        the PSP shape on top of a baseline exponential decay, which is useful when the
-        PSP follows close after another PSP or action potential.
-        See *amp_ratio* to bound the amplitude of the baseline exponential.
-    weight : numpy array, size equal to data waveform, default: np.ones(len(response.data))
-        assigns relative weights to each data point in waveform for fitting.
+    sign : int
+        Specifies the sign of the PSP deflection. Must be 1, -1, or 0.
+    exp_baseline : bool
+        If True, then the pre-response baseline is fit to an exponential decay. 
+        This is useful when the PSP follows close after another PSP or action potential.
+    baseline_like_psp : bool
+        If True, then the baseline exponential tau and psp decay tau are forced to be equal,
+        and their amplitudes are forced to have the same sign.
+        This is useful in situations where the baseline has an exponential decay caused by a preceding
+        PSP of similar shape, such as when fitting one PSP in a train.
+    refine : bool
+        If True, then fit in two stages, with the second stage searching over rise/decay.
+    init_params : dict
+        Initial parameter guesses
     fit_kws : dict
-        Additional key words that are fed to lmfit
-    The parameters below are fed to the psp function. Each value in the 
-        key:value dictionary pair must be a tuple.
-        In general the structure of the tuple is of the form, 
-        (initial conditions, lower boundary, higher boundary).
-        The initial conditions can be either a number or a list 
-        of numbers specifying several initial conditions.  The 
-        initial condition may also be fixed by replacing the lower 
-        higher boundary combination with 'fixed'. If nothing is 
-        supplied defaults will be used.    
-        Examples:    
-            amplitude=(10, 0, 20)
-            amplitude=(10, 'fixed')
-            amplitude=([5,10, 20], 0, 20)
-            amplitude=([5,10, 20], 'fixed') 
-        xoffset : tuple
-            Time where psp begins in reference to the start of *response*.
-            Note that this parameter must be specified by user.
-            Example: ``(14e-3, -float('inf'), float('int'))``
-        yoffset : tuple
-            Vertical offset of rest.  Note that default of zero assumes rest has been subtracted from traces.
-            Default is ``(0, -float('inf'), float('inf')``.
-        rise_time : tuple
-            Time from beginning of psp until peak. Default initial condition is 5 ms for current clamp
-            or 1 ms for voltage clamp. Default bounds are calculated using *rise_time_mult_factor*.
-        decay_tau : tuple
-            Decay time constant. Default initial condition is 50 ms for current clamp
-            or 4 ms for voltage clamp. Default bounds are from 0.1 to 10 times the initial value.
-        rise_power : tuple
-            Exponent for the rising phase; larger values result in a slower activation. Default is
-            ``(2.0, 'fixed')``.
-        amp_ratio : tuple
-            Ratio of the amplitude of the baseline exponential decay to the amplitude of the PSP.
-            This parameter is used when *stacked* is True in order to bound the amplitude of the
-            baseline exponential.
+        Extra keyword arguments to send to the minimizer
     
     Returns
     -------
     fit : lmfit.model.ModelResult
         Best fit
     """           
+    import pyqtgraph as pg
+    prof = pg.debug.Profiler(disabled=True, delayed=False)
     
-    # extracting these for ease of use
-    t = response.time_values
-    y = response.data
-    dt = response.dt
+    if ui is not None:
+        ui.clear()
+        ui.console.setStack()
+        ui.plt1.plot(data.time_values, data.data)
+        ui.plt1.addLine(x=search_window[0], pen=0.3)
+        ui.plt1.addLine(x=search_window[1], pen=0.3)
+        prof('plot')
+
+    if fit_kws is None:
+        fit_kws = {}
+    if init_params is None:
+        init_params = {}
+
+    method = 'leastsq'
+    fit_kws.setdefault('maxfev', 500)
+
+    # good fit, slow
+    # method = 'Nelder-Mead'
+    
+    # fit_kws.setdefault('options', {
+    #     'maxiter': 300, 
+        
+    #     # 'disp': True,
+    # })
+    
+    # good fit
+    # method = 'Powell'
+    # fit_kws.setdefault('options', {'maxfev': 200, 'disp': True})
+
+    # bad fit
+    # method = 'CG'
+    # fit_kws.setdefault('options', {'maxiter': 100, 'disp': True})
+
+    # method = 'L-BFGS-B'
+    # fit_kws.setdefault('options', {'maxiter': 100, 'disp': True})
+
+    # take some measurements to help constrain fit
+    data_min = data.data.min()
+    data_max = data.data.max()
+    data_mean = data.mean()
     
     # set initial conditions depending on whether in voltage or current clamp
     # note that sign of these will automatically be set later on based on the 
     # the *sign* input
     if clamp_mode == 'ic':
-        amp_init = .2e-3
-        amp_max = 100e-3
-        rise_time_init = 5e-3
-        decay_tau_init = 50e-3
+        amp_init = init_params.get('amp', .2e-3)
+        amp_max = min(100e-3, 3 * (data_max-data_min))
+        rise_time_init = init_params.get('rise_time', 5e-3)
+        decay_tau_init = init_params.get('decay_tau', 50e-3)
+        exp_tau_init = init_params.get('exp_tau', 50e-3)
+        exp_amp_max = 100e-3
     elif clamp_mode == 'vc':
-        amp_init = 20e-12
-        amp_max = 500e-12
-        rise_time_init = 1e-3
-        decay_tau_init = 4e-3
+        amp_init = init_params.get('amp', 20e-12)
+        amp_max = min(500e-12, 3 * (data_max-data_min))
+        rise_time_init = init_params.get('rise_time', 1e-3)
+        decay_tau_init = init_params.get('decay_tau', 4e-3)
+        exp_tau_init = init_params.get('exp_tau', 4e-3)
+        exp_amp_max = 10e-9
     else:
         raise ValueError('clamp_mode must be "ic" or "vc"')
 
     # Set up amplitude initial values and boundaries depending on whether *sign* are positive or negative
-    if sign == '-':
-        amp_default = (-amp_init, -amp_max, 0)
-    elif sign == '+':
-        amp_default = (amp_init, 0, amp_max)
-    elif sign == 'any':
-        warnings.warn("You are not specifying the predicted sign of your psp.  This may slow down or mess up fitting")
-        amp_default = (0, -amp_max, amp_max)
+    if sign == -1:
+        amp = (-amp_init, -amp_max, 0)
+    elif sign == 1:
+        amp = (amp_init, 0, amp_max)
+    elif sign == 0:
+        amp = (0, -amp_max, amp_max)
     else:
-        raise ValueError('sign must be "+", "-", or "any"')
+        raise ValueError('sign must be 1, -1, or 0')
         
-    # initial condition, lower boundry, upper boundry    
+    # initial condition, lower boundary, upper boundary
     base_params = {
-        'xoffset': xoffset,
-        'yoffset': yoffset or (0, -float('inf'), float('inf')),
-        'rise_time': rise_time or (rise_time_init, rise_time_init/rise_time_mult_factor, rise_time_init*rise_time_mult_factor),
-        'decay_tau': decay_tau or (decay_tau_init, decay_tau_init/10., decay_tau_init*10.),
-        'rise_power': rise_power or (2, 'fixed'),
-        'amp': amp or amp_default,
+        'yoffset': (init_params.get('yoffset', data_mean), -1.0, 1.0),
+        'rise_time': (rise_time_init, rise_time_init/10., rise_time_init*10.),
+        'decay_tau': (decay_tau_init, decay_tau_init/10., decay_tau_init*10.),
+        'rise_power': (2, 'fixed'),
+        'amp': amp,
     }
     
     # specify fitting function and set up conditions
-    if not isinstance(stacked, bool):
-        raise Exception("Stacked must be True or False")
-    if stacked:
-        psp = StackedPsp()
-        base_params.update({
-            #TODO: figure out the bounds on these
-            'amp_ratio': amp_ratio or (0, -100, 100),
-            'exp_amp': 'amp * amp_ratio',
-        })  
+    psp = StackedPsp()
+    if exp_baseline:
+        if baseline_like_psp:
+            exp_min = 0 if sign == 1 else -exp_amp_max 
+            exp_max = 0 if sign == -1 else exp_amp_max 
+            base_params['exp_tau'] = 'decay_tau'
+        else:
+            exp_min = -exp_amp_max 
+            exp_max = exp_amp_max 
+            base_params['exp_tau'] = (exp_tau_init, exp_tau_init / 10., exp_tau_init * 20.)
+        base_params['exp_amp'] = (0.01 * sign * amp_init, exp_min, exp_max)
     else:
-        psp = Psp()
+        base_params.update({'exp_amp': (0, 'fixed'), 'exp_tau': (1, 'fixed')})
     
-    # set weighting that 
-    if weight is None: #use default weighting
-        weight = np.ones(len(y))
-    else:  #works if there is a value specified in weight
-        if len(weight) != len(y):
-            raise Exception('the weight and array vectors are not the same length') 
+    # print(clamp_mode, base_params, sign, amp_init)
     
-    # arguement to be passed through to fitting function
-    fit_kws = {'weights': weight}   
+    # if weight is None: #use default weighting
+    #     weight = np.ones(len(y))
+    # else:  #works if there is a value specified in weight
+    #     if len(weight) != len(y):
+    #         raise Exception('the weight and array vectors are not the same length')     
+    # fit_kws['weights'] = weight
 
-    # convert initial parameters into a list of dictionaries to be consumed by psp.fit()        
-    param_dict_list = create_all_fit_param_combos(base_params)
+    # Round 1: coarse fit
 
-    # cycle though different parameters sets and chose best one
-    best_fit = None
-    best_score = None
-    for p in param_dict_list:
-        fit = psp.fit(y, x=t, params=p, fit_kws=fit_kws, method=method)
-        err = np.sum(fit.residual**2)  # note: using this because normalized (nrmse) is not necessary to comparing fits within the same data set
-        if best_fit is None or err < best_score:
-            best_fit = fit
-            best_score = err
-    fit = best_fit
+    # Coarse search xoffset
+    n_xoffset_chunks = max(1, int((search_window[1] - search_window[0]) / 1e-3))
+    xoffset_chunks = np.linspace(search_window[0], search_window[1], n_xoffset_chunks+1)
+    xoffset = [{'xoffset': ((a+b)/2., a, b)} for a,b in zip(xoffset_chunks[:-1], xoffset_chunks[1:])]
+    
+    prof('prep for coarse fit')
 
-    # nrmse = fit.nrmse()
-    if 'baseline_std' in response.meta:
-        fit.snr = abs(fit.best_values['amp']) / response.meta['baseline_std']
-        fit.err = fit.nrmse() / response.meta['baseline_std']
+    # Find best coarse fit 
+    search = SearchFit(psp, [xoffset], params=base_params, x=data.time_values, data=data.data, fit_kws=fit_kws, method=method)
+    for i,result in enumerate(search.iter_fit()):
+        pass
+        # prof('  coarse fit iteration %d/%d: %s %s' % (i, len(search), result['param_index'], result['params']))
+    fit = search.best_result.best_values
+    prof("coarse fit done (%d iter)" % len(search))
+
+    if ui is not None:
+        br = search.best_result
+        ui.plt1.plot(data.time_values, br.best_fit, pen=(0, 255, 0, 100))
+
+    if not refine:
+        return search.best_result
+
+    # Round 2: fine fit
+        
+    # Fine search xoffset
+    fine_search_window = (max(search_window[0], fit['xoffset']-1e-3), min(search_window[1], fit['xoffset']+1e-3))
+    n_xoffset_chunks = max(1, int((fine_search_window[1] - fine_search_window[0]) / .2e-3))
+    xoffset_chunks = np.linspace(fine_search_window[0], fine_search_window[1], n_xoffset_chunks + 1)
+    xoffset = [{'xoffset': ((a+b)/2., a, b)} for a,b in zip(xoffset_chunks[:-1], xoffset_chunks[1:])]
+
+    # Search amp / rise time / decay tau to avoid traps
+    rise_time_inits = base_params['rise_time'][0] * 1.2**np.arange(-1,6)
+    rise_time = [{'rise_time': (x,) + base_params['rise_time'][1:]} for x in rise_time_inits]
+
+    decay_tau_inits = base_params['decay_tau'][0] * 2.0**np.arange(-1,2)
+    decay_tau = [{'decay_tau': (x,) + base_params['decay_tau'][1:]} for x in decay_tau_inits]
+
+    search_params = [
+        rise_time, 
+        decay_tau, 
+        xoffset,
+    ]
+    
+    # if 'fixed' not in base_params['exp_amp']:
+    #     exp_amp_inits = [0, amp_init*0.01, amp_init]
+    #     exp_amp = [{'exp_amp': (x,) + base_params['exp_amp'][1:]} for x in exp_amp_inits]
+    #     search_params.append(exp_amp)
+
+    # if no sign was specified, search from both sides    
+    if sign == 0:
+        amp = [{'amp': (amp_init, -amp_max, amp_max)}, {'amp': (-amp_init, -amp_max, amp_max)}]
+        search_params.append(amp)
+
+    prof("prepare for fine fit")
+
+    # Find best fit 
+    search = SearchFit(psp, search_params, params=base_params, x=data.time_values, data=data.data, fit_kws=fit_kws, method=method)
+    for i,result in enumerate(search.iter_fit()):
+        pass
+        # prof('  fine fit iteration %d/%d: %s %s' % (i, len(search), result['param_index'], result['params']))
+    fit = search.best_result
+    prof('fine fit done (%d iter)' % len(search))
 
     return fit
 
+
+class PspFitTestCase(DataTestCase):
+    def __init__(self):
+        DataTestCase.__init__(self, PspFitTestCase.fit_psp)
+
+    @staticmethod
+    def fit_psp(**kwds):
+        result = fit_psp(**kwds)
+        # for storing / comparing fit results, we need to return a dict instead of ModelResult
+        ret = result.best_values.copy()
+        ret['nrmse'] = result.nrmse()
+        return ret
+
+    @property
+    def name(self):
+        meta = self.meta
+        return "%0.3f_%s_%s_%s_%s" % (meta['expt_id'], meta['sweep_id'], meta['pre_cell_id'], meta['post_cell_id'], meta['pulse_n'])
+
+    def _old_load_file(self, file_path):
+        test_data = json.load(open(file_path))
+        self._input_args = {
+            'data': Trace(data=np.array(test_data['input']['data']), dt=test_data['input']['dt']),
+            'xoffset': (14e-3, -float('inf'), float('inf')),
+            'weight': np.array(test_data['input']['weight']),
+            'sign': test_data['input']['amp_sign'], 
+            'stacked': test_data['input']['stacked'],
+        }
+        self._expected_result = test_data['out']['best_values']
+        self._meta = {}
+        self._loaded_file_path = file_path
+
+    def load_file(self, file_path):
+        DataTestCase.load_file(self, file_path)
+        xoff = self._input_args.pop('xoffset', None)
+        if xoff is not None:
+            self._input_args['search_window'] = xoff[1:]

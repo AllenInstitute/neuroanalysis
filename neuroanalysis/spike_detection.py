@@ -1,6 +1,6 @@
 from __future__ import division, print_function
 
-import os, pickle, traceback
+import os, pickle, traceback, warnings
 import numpy as np
 from scipy.ndimage import gaussian_filter
 from scipy.optimize import curve_fit
@@ -47,7 +47,9 @@ def detect_evoked_spikes(data, pulse_edges, **kwds):
 def rc_decay(t, tau, Vo): 
     """function describing the deriviative of the voltage.  If there
     is no spike one would expect this to fall off as the RC of the cell. """
-    return -(Vo/tau)*np.exp(-t/tau)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")    
+        return -(Vo/tau)*np.exp(-t/tau)
 
 
 def detect_ic_evoked_spikes(trace, pulse_edges, dv2_threshold=40e3, mse_threshold=30., ui=None):
@@ -138,7 +140,9 @@ def detect_ic_evoked_spikes(trace, pulse_edges, dv2_threshold=40e3, mse_threshol
         ttofit = ttofit - ttofit[0]
 
         # do fit and see if it matches
-        popt, pcov = curve_fit(rc_decay, ttofit, dv_after_pulse.data, maxfev=10000)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")    
+            popt, pcov = curve_fit(rc_decay, ttofit, dv_after_pulse.data, maxfev=10000)
         fit = rc_decay(ttofit, *popt)
         if ui is not None:
             ui.plt2.plot(dv_after_pulse.time_values, dv_after_pulse.data)

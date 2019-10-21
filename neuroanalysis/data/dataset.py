@@ -1275,7 +1275,12 @@ class TSeriesList(object):
         
         # return a trace with the average data and all other properties taken from the
         # first downsampled trace
-        return downsampled[0].copy(data=avg, t0=start_t, sample_rate=min_sr, dt=None)
+        ds = downsampled[0].copy(data=avg, t0=start_t, sample_rate=min_sr, dt=None)
+        
+        # Add metadata
+        ds.meta['mean_of_n'] = len(clipped_data)
+        
+        return ds
 
 
 class DAQRecording(Recording):
