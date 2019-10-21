@@ -1,6 +1,6 @@
 from collections import OrderedDict
 from neuroanalysis.data.pair import Pair
-import os
+import os, re, json
 
 class Experiment(object):
     """Base class defining the structure of an experiment.
@@ -1019,14 +1019,16 @@ class Experiment(object):
         else:
             return "http://lims2/drawing_tool?image_series=%d" % images[0]['image_series']
 
-    # @property
-    # def multipatch_log(self):
-    #     files = [p for p in os.listdir(self.path) if re.match(r'MultiPatch_\d+.log', p)]
-    #     if len(files) == 0:
-    #         raise TypeError("Could not find multipatch log file for %s" % self)
-    #     if len(files) > 1:
-    #         raise TypeError("Found multiple multipatch log files for %s" % self)
-    #     return os.path.join(self.path, files[0])
+    @property
+    def multipatch_log(self):
+        if not os.path.exists(self.path):
+            raise TypeError("No valid path to look for files.")
+        files = [p for p in os.listdir(self.path) if re.match(r'MultiPatch_\d+.log', p)]
+        if len(files) == 0:
+            raise TypeError("Could not find multipatch log file for %s" % self)
+        if len(files) > 1:
+            raise TypeError("Found multiple multipatch log files for %s" % self)
+        return os.path.join(self.path, files[0])
 
     @property
     def surface_depth(self):
