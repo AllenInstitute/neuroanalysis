@@ -377,6 +377,61 @@ def find_square_pulses(trace, baseline=None):
             pulses[-1].pulse_number = i
     return pulses
 
+def find_noisy_square_pulses(trace, baseline=None, amp_threshold=None, std_threshold=3.0, min_duration=0):
+    """Return a list of SquarePulse instances describing square pulses found
+    in the given trace.
+    
+    A pulse is defined as any contiguous region of the stimulus waveform
+    that has a value outside the amp_threshold or std_threshold from the 
+    baseline. If no baseline is specified, then the first 50 samples in the 
+    stimulus are used.
+    
+    Parameters
+    ----------
+    trace : TSeries instance
+        The stimulus waveform. This can contain noise - for noise free data 
+        see `find_square_pulse`.
+    baseline : numpy.array | None
+        Specify an array to use as the baseline (a region considered to be 
+        "no pulse"). If no baseline is specified, then the first 50 samples of
+        *trace* are used.
+    amp_threshold: float | None
+        Amplitude change (from baseline) necessary to find a pulse (in same units as trace). If no 
+        amp_threshold is specified, std_threshold will be used instead.
+    std_threshold: float | 3.0
+        How many stdev's the pulse must be from the baseline to be detected. 
+    min_duration: float | 0
+        If specified, the minimum duration of a pulse (in seconds). Pulses shorter
+        than min_duration will be discarded.
+    """
+    if not isinstance(trace, TSeries):
+        raise TypeError("argument must be TSeries instance")
+
+    if baseline is None:
+        baseline = trace.data[:50]
+
+    if amp_threshold is None:
+        threshold = baseline.std()*std_threshold
+    else:
+        threshold = amp_threshold
+
+    sdiff = np.diff(trace.data - baseline.mean())
+    changes = np.argwhere(abs(sdiff) > threshold)[:, 0] + 1
+
+    pulses = []
+    for i, start in enumerate(changes):
+        amp = trace.data[start] - baseline.mean()
+        if abs(amp) > threshold: ## should only be true at the start of pulses
+            stop = changes[i+1] if (i+1 < len(changes)) else len(trace)
+            t_start = trace.time_at(start)
+            duration = (stop - start) * trace.dt
+            if duration > min_duration:
+                pulses.append(SquarePulse(start_time=t_start, duration=duration, amplitude=amp, units=trace.units))
+                pulses[-1].pulse_number = i
+
+    return pulses
+
+
 
 class SquarePulseTrain(Stimulus):
     """A train of identical, regularly-spaced square pulses.
