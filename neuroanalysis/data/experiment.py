@@ -46,7 +46,7 @@ class Experiment(object):
         self._ephys_file = None
         self._connections_file = None
         self._connections_file_version = None ## save connections file version so we don't need to read the file every time we need to check the version
-        #self._data = None
+        self._data = None
         #self._stim_list = None
         #self._genotype = None
         #self._cre_types = None
@@ -886,24 +886,31 @@ class Experiment(object):
             return None
         return SynPhysCache().get_cache(self.nwb_file)
 
+    # @property
+    # def data(self):
+    #     """Data object from NWB file. 
+        
+    #     Contains all ephys recordings.
+    #     """
+    #     if self._data is None:
+    #         try:
+    #             self._data = MultiPatchExperiment(self.nwb_cache_file)
+    #         except IOError:
+    #             os.remove(self.nwb_cache_file)
+    #             self._data = MultiPatchExperiment(self.nwb_cache_file)
+    #         except Exception as exc:
+    #             if isinstance(exc.args[0], str) and 'is not inside' in exc.args[0]:
+    #                 return MultiPatchExperiment(self.nwb_file)
+    #             else:
+    #                 raise
+    #     return self._data
     @property
     def data(self):
-        """Data object from NWB file. 
-        
-        Contains all ephys recordings.
-        """
+        """Return an ephys data object."""
         if self._data is None:
-            try:
-                self._data = MultiPatchExperiment(self.nwb_cache_file)
-            except IOError:
-                os.remove(self.nwb_cache_file)
-                self._data = MultiPatchExperiment(self.nwb_cache_file)
-            except Exception as exc:
-                if isinstance(exc.args[0], str) and 'is not inside' in exc.args[0]:
-                    return MultiPatchExperiment(self.nwb_file)
-                else:
-                    raise
+            self._data = self.library.load_ephys_data(self)
         return self._data
+
 
     def close_data(self):
         self.data.close()
