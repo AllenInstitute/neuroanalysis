@@ -7,6 +7,9 @@ from neuroanalysis.data.electrode import Electrode
 import pyqtgraph as pg
 from multipatch_analysis.util import timestamp_to_datetime
 from multipatch_analysis import config
+#from multipatch_analysis.data.data import MultiPatchDataset
+#from neuroanalysis.miesnwb import MiesNwb
+from optoanalysis.data.dataset import OptoNwb
 
 #def get_cells(expt):
 #    """Return a dictionary of {cell_id:Cell(), ...} for all cells in experiment."""
@@ -105,6 +108,14 @@ def get_ephys_file(expt):
         ephys_file = files[0]
     return ephys_file
 
+def load_ephys_data(expt):
+    nwb = expt.ephys_file
+    #return MultiPatchDataset(nwb)
+    #return MiesNwb(nwb)
+    if nwb is not None:
+        return OptoNwb(nwb)
+
+
 def get_mosaic_file(expt):
     if not os.path.exists(expt.path):
         return None
@@ -123,10 +134,10 @@ def get_mosaic_file(expt):
 
 
 def load_from_file(expt):
-    """First function that is called during expt initialization. Load information from the file at file_path
+    """First function that is called during expt initialization. Load information from the file at expt._load_file
     to populate fields in expt. Must populate: electrodes, _cells
 
-    For opto, file_path leads to a connections.json file. A file from either acq4's mosaic editor or new_test_ui.py is accepted.
+    For opto, the _load_file is a connections.json file. A file from either acq4's mosaic editor or new_test_ui.py is accepted.
     """
     file_path = expt._load_file
     expt.electrodes = OrderedDict()
@@ -176,18 +187,19 @@ def process_meta_info(expt):
             dist = [e for e in meta_info.get('distances') if e.get('headstage')==n]
             if len(dist) > 1:
                 raise Exception('Something is wrong.')
-            if cell._distance_to_pia is None:
-                try:
-                    cell._distance_to_pia = float(dist[0]['toPia'])*1e-6
-                except ValueError:
-                    if dist[0]['toPia'] != '':
-                        raise
-            if cell._distance_to_wm is None:
-                try:
-                    cell._distance_to_wm = float(dist[0]['toWM'])*1e-6
-                except ValueError:
-                    if dist[0]['toWM'] != '':
-                        raise
+            elif len(dist) == 1:
+                if cell._distance_to_pia is None:
+                    try:
+                        cell._distance_to_pia = float(dist[0]['toPia'])*1e-6
+                    except ValueError:
+                        if dist[0]['toPia'] != '':
+                            raise
+                if cell._distance_to_wm is None:
+                    try:
+                        cell._distance_to_wm = float(dist[0]['toWM'])*1e-6
+                    except ValueError:
+                        if dist[0]['toWM'] != '':
+                            raise
         if cell._percent_depth is None and cell._distance_to_pia is not None and cell._distance_to_wm is not None:
             cell._percent_depth = cell._distance_to_pia/(cell._distance_to_pia + cell._distance_to_wm)
 
@@ -411,10 +423,16 @@ def cortical_site_info(expt):
     else:
         return {}
 
+def load_stimulation_log(expt):
+    log_files = sorted(glob.glob(os.path.join(expt._site_path, 'PhotoStimulationLog_*.log')))
 
+    log = {}
+    for log_file in log_files:
+        with open(log_file, 'r') as f:
+            for line in f.readlines():
+                log.update(json.loads(line.rstrip(',\r\n')))
 
-
-
+    return log
 
 
 
