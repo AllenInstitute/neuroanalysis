@@ -1090,7 +1090,7 @@ class TSeries(Container):
 
         # bessel filter gives reasonably good antialiasing with no ringing or edge
         # artifacts
-        from .filter import bessel_filter
+        from ..filter import bessel_filter
         filt = bessel_filter(self, cutoff=sample_rate, order=2)
         t1 = self.time_values
         t2 = np.arange(t1[0], t1[-1], 1.0/sample_rate)
