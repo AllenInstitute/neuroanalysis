@@ -333,7 +333,7 @@ class Recording(Container):
     def channels(self):
         """A list of channels included in this recording.
         """
-        return self._channels.keys()
+        return list(self._channels.keys())
 
     @property
     def start_time(self):
