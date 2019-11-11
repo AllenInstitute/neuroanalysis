@@ -66,6 +66,12 @@ class MiesNwbExplorer(QtGui.QSplitter):
             V_holdings = ''
             I_holdings = ''
             for rec in sweep.recordings:
+                if not hasattr(rec, 'clamp_mode'):
+                    modes += "-"
+                    V_holdings += "-"
+                    I_holdings += "-"
+                    continue
+                    
                 if rec.clamp_mode == 'vc':
                     modes += 'V'
                 else:
@@ -158,11 +164,6 @@ class MiesNwbExplorer(QtGui.QSplitter):
     def _selection_changed(self):
         sel = self.selection()
         if len(sel) == 1:
-            #if isinstance(sel[0], SweepGroup):
-                #self.meta_tree.setData(sel[0].meta())
-            #else:
-            
-            #self.meta_tree.setData(sel[0].meta(all_chans=True))
             sweep = sel[0]
             self.meta_tree.setColumnCount(len(sweep.devices)+1)
             self.meta_tree.setHeaderLabels([""] + [str(dev) for dev in sweep.devices])
@@ -178,7 +179,7 @@ class MiesNwbExplorer(QtGui.QSplitter):
     def _populate_meta_tree(self, meta, root):
         keys = list(meta[0].keys())
         for m in meta[1:]:
-            keys = merge_lists(keys, m.keys())
+            keys = merge_lists(keys, list(m.keys()))
         
         for k in keys:
             vals = [m.get(k) for m in meta]

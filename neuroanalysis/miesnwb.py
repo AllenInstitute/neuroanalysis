@@ -298,6 +298,12 @@ class MiesTSeries(TSeries):
                     exc._ignorable_bug_flag = True
                     raise exc
                 self._data = (np.array(rec.command_hdf) * scale) + offset
+
+            if np.isnan(self._data[-1]):
+                # recording was interrupted; remove NaNs from the end of the array
+                last_sample = np.argwhere(np.isfinite(self._data)).max()
+                self._data = self._data[:last_sample+1]
+
         return self._data
     
     @property
@@ -469,11 +475,14 @@ class MiesRecording(PatchClampRecording):
     @property
     def baseline_regions(self):
         """A list of (start, stop) time pairs that cover regions of the recording
-        the cell is expected to be in a steady state.
+        the cell is expected to be in a steady (unperturbed) state.
         """
         pri = self['primary']
         regions = []
+        # delay onset auto is time from the beginning of the sweep until the end of the test pulse        
+        # (if any), including its flanking baseline regions
         start = self.meta['notebook']['Delay onset auto'] / 1000.  # duration of test pulse
+        # delay onset user is extra delay time after the test pulse and before any stim can take effect
         dur = self.meta['notebook']['Delay onset user'] / 1000.  # duration of baseline
         if dur > 0:
             regions.append((start, start+dur))
