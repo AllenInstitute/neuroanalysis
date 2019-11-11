@@ -5,8 +5,8 @@ from collections import OrderedDict
 from neuroanalysis.data.cell import Cell
 from neuroanalysis.data.electrode import Electrode
 import pyqtgraph as pg
-from multipatch_analysis.util import timestamp_to_datetime
-from multipatch_analysis import config
+from aisynphys.util import timestamp_to_datetime
+from aisynphys import config
 #from multipatch_analysis.data.data import MultiPatchDataset
 #from neuroanalysis.miesnwb import MiesNwb
 from optoanalysis.data.dataset import OptoNwb

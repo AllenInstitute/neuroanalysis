@@ -1,7 +1,7 @@
 from __future__ import print_function, division
 import numpy as np
 
-from multipatch_analysis.constants import ALL_CRE_TYPES, ALL_LABELS, EXCITATORY_CRE_TYPES, INHIBITORY_CRE_TYPES
+from aisynphys.constants import ALL_CRE_TYPES, ALL_LABELS, EXCITATORY_CRE_TYPES, INHIBITORY_CRE_TYPES
 
 
 class Cell(object):
