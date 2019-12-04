@@ -33,10 +33,17 @@ class Container(object):
     """
     def __init__(self):
         self._meta = OrderedDict()
+        self._key = None
         
     @property
     def parent(self):
         return None
+
+    @property
+    def top_parent(self):
+        while self.parent is not None:
+            return self.parent.top_parent
+        return self
     
     @property
     def children(self):
@@ -46,7 +53,7 @@ class Container(object):
     def key(self):
         """Key that uniquely identifies this object among its siblings.
         """
-        return None
+        return self._key
     
     @property
     def meta(self):
@@ -90,11 +97,24 @@ class Dataset(Container):
     Dataset, whereas recordings made from different pieces of tissue probably
     belong in different Datasets.
     """
-    def __init__(self, data=None, meta=None):
+    loader_class = None
+
+    def __init__(self, data=None, meta=None, file_path=None, loader_class=None):
         Container.__init__(self)
         self._data = data
         if meta is not None:
             self._meta.update(OrderedDict(meta))
+
+        self._loader = None
+        self.file_path = file_path
+        if loader_class is not None: ## allow overwrite on initialization
+            self.loader_class = loader_class
+
+    @property
+    def loader(self):
+        if self._loader is None:
+            self._loader = self.loader_class(self.file_path)
+        return self._loader
     
     @property
     def contents(self):
@@ -103,6 +123,8 @@ class Dataset(Container):
         
         Grandchild objects are not included in this list.
         """
+        if self._data is None:
+            self._data = self.loader.get_sync_recordings(self)
         return self._data[:]
 
     def find(self, type):
@@ -244,10 +266,11 @@ class SyncRecording(Container):
     This is typically the result of recording from multiple devices at the same time
     (for example, two patch-clamp amplifiers and a camera).
     """
-    def __init__(self, recordings=None, parent=None):
+    def __init__(self, recordings=None, parent=None, key=None):
         self._parent = parent
-        self._recordings = recordings if recordings is not None else OrderedDict()
+        self._recording_dict = recordings #if recordings is not None else OrderedDict()
         Container.__init__(self)
+        self._key = key
 
     @property
     def type(self):
@@ -256,21 +279,27 @@ class SyncRecording(Container):
         pass
 
     @property
+    def recording_dict(self):
+        if self._recording_dict is None:
+            self._recording_dict = self.top_parent.loader.get_recordings(self)
+        return self._recording_dict
+
+    @property
     def devices(self):
         """A list of the names of devices in this recording.
         """
-        return list(self._recordings.keys())
+        return list(self.recording_dict.keys())
 
     def __getitem__(self, item):
         """Return a recording given its device name.
         """
-        return self._recordings[item]
+        return self.recording_dict[item]
 
     @property
     def recordings(self):
         """A list of the recordings in this syncrecording.
         """
-        return list(self._recordings.values())
+        return list(self.recording_dict.values())
 
     def data(self):
         return np.concatenate([self[dev].data()[None, :] for dev in self.devices], axis=0)
@@ -651,6 +680,8 @@ class TSeries(Container):
     def data(self):
         """The array of sample values.
         """
+        if self._data is None:
+            self._data = self.top_parent.loader.get_tseries_data(self)
         return self._data
         
     @property
