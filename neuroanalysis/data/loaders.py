@@ -3,7 +3,8 @@ import numpy as np
 from collections import OrderedDict
 from neuroanalysis.data.dataset import SyncRecording, PatchClampRecording, Recording, TSeries
 import neuroanalysis.util.mies_nwb_parsing as parser
-import aisynphys.pipeline.opto.data_model as dm
+#import aisynphys.pipeline.opto.data_model as dm
+import neuroanalysis.util.device_config as dm
 
 
 class MiesNwbLoader():
