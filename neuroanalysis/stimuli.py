@@ -270,6 +270,27 @@ class Stimulus(object):
             raise KeyError('Unknown stimulus class "%s"' % name)
         return cls._subclasses[name]
 
+class LazyLoadStimulus(Stimulus):
+
+    def __init__(self, description, start_time=0, units=None, items=None, parent=None, loader=None, source=None):
+        if loader is None:
+            raise Exception("Use of a LazyLoadStimulus requires a loader to be specified upon init.")
+        if source is None:
+            raise Exception("Use of a LazyLoadStimulus requires a source to be specified upon init.")
+
+        Stimulus.__init__(self, description, start_time=start_time, units=units, items=items, parent=parent)
+        self._loader = loader
+        self._source = source
+
+
+    @property
+    def items(self):
+        if len(self._items) == 0:
+            items = self._loader.load_stimulus_items(self._source)
+            for item in items:
+                self.append_item(item)
+        return tuple(self._items)
+
 
 class Offset(Stimulus):
     """A constant offset in the stimulus.

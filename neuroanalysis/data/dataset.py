@@ -60,6 +60,10 @@ class Container(object):
     def meta(self):
         return self._meta
 
+    def update_meta(self, **kargs):
+        for k, v in kargs:
+            self._meta.update(k=v)
+
     @property
     def all_children(self):
         allch = [self]
@@ -459,9 +463,12 @@ class PatchClampRecording(Recording):
                       
         for k in extra_meta:
             meta[k] = kwds.pop(k, None)
-        self._baseline_data = None
+
         Recording.__init__(self, *args, **kwds)
         self._meta.update(meta)
+
+        self._baseline_data = None
+        self._test_pulse = None
         
     @property
     def cell_id(self):
@@ -483,7 +490,9 @@ class PatchClampRecording(Recording):
 
     @property
     def stimulus(self):
-        return self._meta.get('stimulus', None)
+        if self._meta.get('stimulus') is None:
+            self._meta['stimulus'] = self.top_parent.loader.load_stimulus(self)
+        return self._meta.get('stimulus')
 
     @property
     def holding_potential(self):
@@ -514,6 +523,12 @@ class PatchClampRecording(Recording):
             return self._meta['holding_current']
         else:
             return self.baseline_current
+
+    @property
+    def test_pulse(self):
+        if self._test_pulse is None:
+            self._test_pulse = self.top_parent.loader.load_test_pulse(self)
+        return self._test_pulse ## may still be None
 
     @property
     def nearest_test_pulse(self):
