@@ -132,7 +132,8 @@ class MiesNwbLoader():
                     meta['notebook'] = nb
                     meta['sweep_name'] = 'data_%05d_AD%d'%(sweep_id, ch)
                     start_time = parser.igorpro_date(nb['TimeStamp'])
-                    device = 'Fidelity' ## do this for right now, implement lookup in the future
+                    #device = 'Fidelity' ## do this for right now, implement lookup in the future
+                    device = dm.device_mapping[self.rig][meta['sweep_name'][-3:]]
 
                     rec = Recording(
                         #channels = {'reporter':TSeries(data=np.array(data), dt=dt)},
