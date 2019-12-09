@@ -158,3 +158,24 @@ def igorpro_date(timestamp):
     dt = datetime(1970,1,1) - datetime(1904,1,1)
     return datetime.utcfromtimestamp(timestamp) - dt
 
+def parse_stim_wave_note(rec_notebook):
+    """Return (version, epochs) from the stim wave note of the notebook associated with a recording.
+    """
+
+    sweep_count = int(rec_notebook['Set Sweep Count'])
+    wave_note = rec_notebook['Stim Wave Note']
+    lines = wave_note.split('\n')
+    version = [line for line in lines if line.startswith('Version =')]
+    if len(version) == 0:
+        version = 0
+    else:
+        version = float(version[0].rstrip(';').split(' = ')[1])
+    epochs = []
+    for line in lines:
+        if not line.startswith('Sweep = %d;' % sweep_count):
+            continue
+        epoch = dict([part.split(' = ') for part in line.split(';') if '=' in part])
+        epochs.append(epoch)
+        
+    return version, epochs
+
