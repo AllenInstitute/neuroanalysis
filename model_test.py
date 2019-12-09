@@ -2,6 +2,9 @@ import os
 import h5py
 from neuroanalysis.data.loaders import MiesNwbLoader
 from neuroanalysis.data.dataset import Dataset
+import pyqtgraph as pg
+
+pg.dbg()
 
 
 f = "/Users/meganbkratz/Code/ai/example_data/data/2019-06-13_000/slice_000/site_000/2019_06_13_exp1_TH-compressed.nwb"
