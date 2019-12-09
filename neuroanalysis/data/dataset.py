@@ -34,10 +34,11 @@ class Container(object):
     def __init__(self):
         self._meta = OrderedDict()
         self._key = None
+        self._parent = None
         
     @property
     def parent(self):
-        return None
+        return self._parent
 
     @property
     def top_parent(self):
@@ -170,13 +171,13 @@ class Dataset(Container):
     def trace_table(self):
         return self.meta_table(self.all_traces)
 
-    @property
-    def parent(self):
-        """None
+    # @property
+    # def parent(self):
+    #     """None
         
-        This is a convenience property used for traversing the object hierarchy.
-        """
-        return None
+    #     This is a convenience property used for traversing the object hierarchy.
+    #     """
+    #     return None
     
     @property
     def children(self):
@@ -243,13 +244,13 @@ class RecordingSequence(Container):
         Each parameter must be a key in the metadata for a single recording.
         """
 
-    @property
-    def parent(self):
-        """None
+    # @property
+    # def parent(self):
+    #     """None
         
-        This is a convenience property used for traversing the object hierarchy.
-        """
-        return None
+    #     This is a convenience property used for traversing the object hierarchy.
+    #     """
+    #     return None
     
     @property
     def children(self):
@@ -267,9 +268,9 @@ class SyncRecording(Container):
     (for example, two patch-clamp amplifiers and a camera).
     """
     def __init__(self, recordings=None, parent=None, key=None):
+        Container.__init__(self)
         self._parent = parent
         self._recording_dict = recordings #if recordings is not None else OrderedDict()
-        Container.__init__(self)
         self._key = key
 
     @property
@@ -304,9 +305,9 @@ class SyncRecording(Container):
     def data(self):
         return np.concatenate([self[dev].data()[None, :] for dev in self.devices], axis=0)
 
-    @property
-    def parent(self):
-        return self._parent
+    # @property
+    # def parent(self):
+    #     return self._parent
 
     @property
     def children(self):
@@ -349,6 +350,7 @@ class Recording(Container):
         self._channels = channels
 
         self._sync_recording = sync_recording
+        self._parent = sync_recording
         
     @property
     def device_type(self):
@@ -387,9 +389,9 @@ class Recording(Container):
     def data(self):
         return np.concatenate([self[ch].data[:,None] for ch in self.channels], axis=1)
 
-    @property
-    def parent(self):
-        return self.sync_recording
+    # @property
+    # def parent(self):
+    #     return self.sync_recording
     
     @property
     def children(self):
