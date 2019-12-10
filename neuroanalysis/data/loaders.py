@@ -8,8 +8,37 @@ import neuroanalysis.util.device_config as dm
 import neuroanalysis.stimuli as stimuli
 from neuroanalysis.test_pulse import PatchClampTestPulse
 
+class DatasetLoader():
+    """An abstract base class for Dataset loaders."""
 
-class MiesNwbLoader():
+    def get_sync_recordings(self, dataset):
+        """Return a list of SyncRecordings."""
+        raise NotImplementedError("Must be implemented in subclass.")
+
+    def get_recordings(self, sync_rec):
+        """Return a dict of {device: Recording}"""
+        raise NotImplementedError("Must be implemented in subclass.")
+
+    def get_tseries_data(self, tseries):
+        """Return a numpy array of the data in the tseries."""
+        raise NotImplementedError("Must be implemented in subclass.")
+
+    def load_stimulus(self, recording):
+        """Return an instance of stimuli.Stimulus"""
+        raise NotImplementedError("Must be implemented in subclass.")
+
+    def load_stimulus_items(self, recording):
+        """Return a list of Stimulus instances. 
+        Used with LazyLoadStimulus to parse stimuli when they are needed."""
+        raise NotImplementedError("Must be implemented in subclass.")
+
+    def load_test_pulse(self, recording):
+        """Return a PatchClampTestPulse."""
+        raise NotImplementedError("Must be implemented in subclass.")
+
+
+
+class MiesNwbLoader(DatasetLoader):
 
     def __init__(self, file_path):
         self._file_path = file_path
@@ -212,6 +241,9 @@ class MiesNwbLoader():
                 data = np.array(self.hdf['stimulus']['presentation'][rec.meta['sweep_name']]['data'])
             else:
                 raise Exception("Not sure where to find data for recording: %s"%rec.meta['sweep_name'])
+
+        else:
+            raise Exception("Getting data for channels named %s is not yet implemented." % chan)
 
 
         if np.isnan(data[-1]):
