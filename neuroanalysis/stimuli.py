@@ -398,7 +398,7 @@ def find_square_pulses(trace, baseline=None):
             pulses[-1].pulse_number = i
     return pulses
 
-def find_noisy_square_pulses(trace, baseline=None, amp_threshold=None, std_threshold=3.0, min_duration=0):
+def find_noisy_square_pulses(trace, baseline=None, amp_threshold=None, std_threshold=10.0, min_duration=0):
     """Return a list of SquarePulse instances describing square pulses found
     in the given trace.
     
@@ -440,10 +440,14 @@ def find_noisy_square_pulses(trace, baseline=None, amp_threshold=None, std_thres
     changes = np.argwhere(abs(sdiff) > threshold)[:, 0] + 1
 
     pulses = []
+    stop = 0
     for i, start in enumerate(changes):
+        if len(pulses) > 0 and stop > changes[i]:
+            continue
         amp = trace.data[start] - baseline.mean()
         if abs(amp) > threshold: ## should only be true at the start of pulses
-            stop = changes[i+1] if (i+1 < len(changes)) else len(trace)
+            stop_list = [c for c in changes[i+1:] if trace.data[c]<threshold] ## get next change where value is below threshold -- allow square pulses to be not quite square
+            stop = stop_list[0] if (len(stop_list) > 0) else len(trace)
             t_start = trace.time_at(start)
             duration = (stop - start) * trace.dt
             if duration > min_duration:
