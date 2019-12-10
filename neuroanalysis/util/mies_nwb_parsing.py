@@ -159,7 +159,18 @@ def igorpro_date(timestamp):
     return datetime.utcfromtimestamp(timestamp) - dt
 
 def parse_stim_wave_note(rec_notebook):
-    """Return (version, epochs) from the stim wave note of the notebook associated with a recording.
+    """Return (version, epochs) from the stim wave note of the labnotebook associated with a recording.
+
+    Paramenters:
+    ------------
+    rec_notebook : dict
+        A labnotebook dict for a recording, as returned by parse_lab_notebook(hdf)[sweep_id][channel]
+
+    Returns:
+    --------
+    (version, epochs) : tuple
+        version is an int, epochs is a list of dicts
+
     """
 
     sweep_count = int(rec_notebook['Set Sweep Count'])
