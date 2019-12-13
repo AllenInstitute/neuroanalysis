@@ -469,6 +469,7 @@ class PatchClampRecording(Recording):
 
         self._baseline_data = None
         self._test_pulse = None
+        self._nearest_test_pulse = None
         
     @property
     def cell_id(self):
@@ -534,70 +535,78 @@ class PatchClampRecording(Recording):
     def nearest_test_pulse(self):
         """The test pulse that was acquired nearest to this recording.
         """
+        if self.test_pulse is not None:
+            return self.test_pulse
 
-    @property
-    def baseline_regions(self):
-        """A list of (start,stop) time pairs that cover regions of the recording
-        the cell is expected to be in a steady state.
-        """
-        return []
+        if self._nearest_test_pulse is None:
+            self._nearest_test_pulse = self.top_parent.loader.find_nearest_test_pulse(self)
 
-    @property
-    def baseline_data(self):
-        """All items in baseline_regions concatentated into a single trace.
-        """
-        if self._baseline_data is None:
-            data = [self['primary'].time_slice(start,stop).data for start,stop in self.baseline_regions]
-            if len(data) == 0:
-                data = np.empty(0, dtype=self['primary'].data.dtype)
-            else:
-                data = np.concatenate(data)
-            data = data[np.isfinite(data)]
-            self._baseline_data = TSeries(data, sample_rate=self['primary'].sample_rate, recording=self)
-        return self._baseline_data
+        return self._nearest_test_pulse
+        
 
-    @property
-    def baseline_potential(self):
-        """The mode potential value from all quiescent regions in the recording.
+    # @property
+    # def baseline_regions(self):
+    #     """A list of (start,stop) time pairs that cover regions of the recording
+    #     the cell is expected to be in a steady state.
+    #     """
+    #     return []
 
-        See float_mode()
-        """
-        if self.meta['baseline_potential'] is None:
-            if self.clamp_mode == 'vc':
-                self.meta['baseline_potential'] = self.meta['holding_potential']
-            else:
-                data = self.baseline_data.data
-                if len(data) == 0:
-                    return None
-                self.meta['baseline_potential'] = float_mode(data)
-        return self.meta['baseline_potential']
+    # @property
+    # def baseline_data(self):
+    #     """All items in baseline_regions concatentated into a single trace.
+    #     """
+    #     if self._baseline_data is None:
+    #         data = [self['primary'].time_slice(start,stop).data for start,stop in self.baseline_regions]
+    #         if len(data) == 0:
+    #             data = np.empty(0, dtype=self['primary'].data.dtype)
+    #         else:
+    #             data = np.concatenate(data)
+    #         data = data[np.isfinite(data)]
+    #         self._baseline_data = TSeries(data, sample_rate=self['primary'].sample_rate, recording=self)
+    #     return self._baseline_data
 
-    @property
-    def baseline_current(self):
-        """The mode current value from all quiescent regions in the recording.
+    # @property
+    # def baseline_potential(self):
+    #     """The mode potential value from all quiescent regions in the recording.
 
-        See float_mode()
-        """
-        if self.meta['baseline_current'] is None:
-            if self.clamp_mode == 'ic':
-                self.meta['baseline_current'] = self.meta['holding_current']
-            else:
-                data = self.baseline_data.data
-                if len(data) == 0:
-                    return None
-                self.meta['baseline_current'] = float_mode(data)
-        return self.meta['baseline_current']
+    #     See float_mode()
+    #     """
+    #     if self.meta['baseline_potential'] is None:
+    #         if self.clamp_mode == 'vc':
+    #             self.meta['baseline_potential'] = self.meta['holding_potential']
+    #         else:
+    #             data = self.baseline_data.data
+    #             if len(data) == 0:
+    #                 return None
+    #             self.meta['baseline_potential'] = float_mode(data)
+    #     return self.meta['baseline_potential']
 
-    @property
-    def baseline_rms_noise(self):
-        """The standard deviation of all data from quiescent regions in the recording.
-        """
-        if self.meta['baseline_rms_noise'] is None:
-            data = self.baseline_data.data
-            if len(data) == 0:
-                return None
-            self.meta['baseline_rms_noise'] = data.std()
-        return self.meta['baseline_rms_noise']
+    # @property
+    # def baseline_current(self):
+    #     """The mode current value from all quiescent regions in the recording.
+
+    #     See float_mode()
+    #     """
+    #     if self.meta['baseline_current'] is None:
+    #         if self.clamp_mode == 'ic':
+    #             self.meta['baseline_current'] = self.meta['holding_current']
+    #         else:
+    #             data = self.baseline_data.data
+    #             if len(data) == 0:
+    #                 return None
+    #             self.meta['baseline_current'] = float_mode(data)
+    #     return self.meta['baseline_current']
+
+    # @property
+    # def baseline_rms_noise(self):
+    #     """The standard deviation of all data from quiescent regions in the recording.
+    #     """
+    #     if self.meta['baseline_rms_noise'] is None:
+    #         data = self.baseline_data.data
+    #         if len(data) == 0:
+    #             return None
+    #         self.meta['baseline_rms_noise'] = data.std()
+    #     return self.meta['baseline_rms_noise']
 
     def _descr(self):
         mode = self.clamp_mode

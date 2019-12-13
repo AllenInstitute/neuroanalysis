@@ -36,6 +36,8 @@ class DatasetLoader():
         """Return a PatchClampTestPulse."""
         raise NotImplementedError("Must be implemented in subclass.")
 
+    def find_nearest_test_pulse(self, recording):
+        raise NotImplementedError("Must be implemented in subclass.")
 
 
 class MiesNwbLoader(DatasetLoader):
@@ -286,6 +288,23 @@ class MiesNwbLoader(DatasetLoader):
         stop = start + int(total_dur / rec['primary'].dt)
         
         return PatchClampTestPulse(rec, indices=(start, stop))
+
+    def find_nearest_test_pulse(self, rec):
+        sweep_id = rec.sync_recording.key
+        device_id = rec.device_id
+
+        min_dt = None
+        nearest = None
+        for srec in rec.sync_recording.parent.contents:
+            if srec[device_id].meta['notebook']['TP Insert Checkbox'] == 1.0:
+                dt = abs((srec[device_id].start_time - rec.start_time).total_seconds())
+                if min_dt is None or dt < min_dt:
+                    min_dt = dt
+                    nearest = srec[device_id].test_pulse
+                if min_dt is not None and dt > min_dt:
+                    break
+
+        return nearest
 
     def load_stimulus(self, rec):
         desc = self.hdf['acquisition/timeseries'][rec.meta['sweep_name']]['stimulus_description'][()][0]
