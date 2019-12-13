@@ -546,12 +546,12 @@ class PatchClampRecording(Recording):
             
 
 
-    # @property
-    # def baseline_regions(self):
-    #     """A list of (start,stop) time pairs that cover regions of the recording
-    #     the cell is expected to be in a steady state.
-    #     """
-    #     return []
+    @property
+    def baseline_regions(self):
+        """A list of (start,stop) time pairs that cover regions of the recording
+        the cell is expected to be in a steady state.
+        """
+        raise Exception('PatchClampRecording.baseline_regions is deprecated. Please use an Analyzer to find baseline_regions instead.')
 
     # @property
     # def baseline_data(self):
