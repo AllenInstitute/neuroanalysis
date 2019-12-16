@@ -49,6 +49,7 @@ class MiesNwbLoader(DatasetLoader):
         self._notebook = None ## parse the lab_notebook part of the nwb 
         self._hdf = None ## holder for the .hdf file
         self._rig = None ## holder for the name of the rig this nwb was recorded on
+        self._device_config = None 
 
     @property
     def hdf(self):
@@ -87,6 +88,12 @@ class MiesNwbLoader(DatasetLoader):
         if self._rig is None:
             self._rig = dm.get_rig_from_nwb(notebook=self.notebook)
         return self._rig
+
+    @property
+    def device_config(self):
+        if self._device_config is None:
+            self._device_config = dm.get_device_config(self.notebook)
+        return self._device_config
 
     def get_sync_recordings(self, dataset):
         ### miesnwb parses sweeps and contents into nwb._timeseries -- this happens in a hidden way inside nwb.contents()
@@ -164,7 +171,7 @@ class MiesNwbLoader(DatasetLoader):
                     meta['sweep_name'] = 'data_%05d_AD%d'%(sweep_id, ch)
                     start_time = parser.igorpro_date(nb['TimeStamp'])
                     #device = 'Fidelity' ## do this for right now, implement lookup in the future
-                    device = dm.device_mapping[self.rig][meta['sweep_name'][-3:]]
+                    device = self.device_config[meta['sweep_name'][-3:]]
 
                     rec = Recording(
                         #channels = {'reporter':TSeries(data=np.array(data), dt=dt)},
@@ -183,8 +190,10 @@ class MiesNwbLoader(DatasetLoader):
                     ttl_data = self.hdf['stimulus/presentation/' + k]['data']
                     dt = ttl_data.attrs['IGORWaveScaling'][1,0] / 1000.
 
-                    ttl_num = k.split('_')[-1]
-                    device = dm.device_mapping[self.rig]['TTL1_%s'%ttl_num]
+                    #ttl_num = k.split('_')[-1]
+                    #device = self.device_config['TTL1_%s'%ttl_num]
+                    ttl = k.split('_', 2)[-1]
+                    device = self.device_config[ttl]
 
                     meta={}
                     meta['sweep_name'] = k
