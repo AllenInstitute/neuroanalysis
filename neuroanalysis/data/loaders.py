@@ -259,8 +259,9 @@ class MiesNwbLoader(DatasetLoader):
 
         if np.isnan(data[-1]):
             # recording was interrupted; remove NaNs from the end of the array
-            last_sample = np.argwhere(np.isfinite(data)).max()
-            data = data[:last_sample+1]
+
+            first_nan = np.searchsorted(data, np.nan)
+            data = data[:first_nan]
 
         return data
 
