@@ -180,7 +180,7 @@ def process_meta_info(expt):
         if cell._morphology.get('initial_call') is None:
             cell._morphology['initial_call'] = meta_info.get('HS%s_class'%n)
         if cell._target_layer is None:
-            cell._target_layer = meta_info.get('HS%s_layer'%n)
+            cell._target_layer = meta_info.get('HS%s_layer'%n).strip().strip('L').strip('l')
         if meta_info.get('HS%s_reporter'%n, '').lower() == 'positive':
             cell._cre_type = meta_info.get('presynapticCre','').lower()
         label_cell(cell, preEffector, meta_info.get('HS%s_reporter'%n, '').lower() == 'positive')
@@ -327,7 +327,10 @@ def load_mosaiceditor_connection_file(expt):
             cell.position = tuple(data['position'])
             cell.has_readout = False
             cell.has_stimulation = True
-            cell._target_layer = data.get('target_layer')
+            target_layer = data.get('target_layer')
+            if target_layer is not None:
+                target_layer = target_layer.strip().strip('L').strip('l')
+            cell._target_layer = target_layer
             cell._percent_depth = data.get('percent_depth')
             cell._distance_to_pia = data.get('distance_to_pia')
             cell._distance_to_wm = data.get('distance_to_wm')
@@ -343,7 +346,10 @@ def load_mosaiceditor_connection_file(expt):
         cell.angle = data['angle']
         cell.has_readout = True
         cell.has_stimulation = True
-        cell._target_layer = data.get('target_layer')
+        target_layer = data.get('target_layer')
+        if target_layer is not None:
+            target_layer = target_layer.strip().strip('L').strip('l')
+        cell._target_layer = target_layer
         cell._percent_depth = data.get('percent_depth')
         cell._distance_to_pia = data.get('distance_to_pia')
         cell._distance_to_wm = data.get('distance_to_wm')
