@@ -61,8 +61,7 @@ class Container(object):
         return self._meta
 
     def update_meta(self, **kargs):
-        for k, v in kargs:
-            self._meta.update(k=v)
+        self._meta.update(kargs)
 
     @property
     def all_children(self):
