@@ -306,6 +306,8 @@ class MiesNwbLoader(DatasetLoader):
         min_dt = None
         nearest = None
         for srec in rec.sync_recording.parent.contents:
+            if device_id not in srec.devices:
+                continue
             if srec[device_id].meta['notebook']['TP Insert Checkbox'] == 1.0:
                 dt = abs((srec[device_id].start_time - rec.start_time).total_seconds())
                 if min_dt is None or dt < min_dt:
