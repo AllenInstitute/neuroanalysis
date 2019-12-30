@@ -10,6 +10,8 @@ from aisynphys import config
 #from multipatch_analysis.data.data import MultiPatchDataset
 #from neuroanalysis.miesnwb import MiesNwb
 from optoanalysis.data.dataset import OptoNwb
+from neuroanalysis.data.dataset import Dataset
+from neuroanalysis.data.loaders import MiesNwbLoader
 
 #def get_cells(expt):
 #    """Return a dictionary of {cell_id:Cell(), ...} for all cells in experiment."""
@@ -113,8 +115,8 @@ def load_ephys_data(expt):
     #return MultiPatchDataset(nwb)
     #return MiesNwb(nwb)
     if nwb is not None:
-        return OptoNwb(nwb)
-
+        #return OptoNwb(nwb)
+        return Dataset(loader=MiesNwbLoader(nwb))
 
 def get_mosaic_file(expt):
     if not os.path.exists(expt.path):
