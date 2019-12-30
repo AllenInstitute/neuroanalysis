@@ -279,7 +279,7 @@ def load_markPoints_connection_file(expt):
     distance = 10e-6
     skip=[]
     for i, p1 in enumerate(points.keys()):
-        for p2 in points.keys()[i+1:len(points)]:
+        for p2 in list(points.keys())[i+1:len(points)]:
             x_dif = points[p2]['pos'][0] - points[p1]['pos'][0]
             y_dif = points[p2]['pos'][1] - points[p1]['pos'][1]
             z_dif = points[p2]['pos'][2] - points[p1]['pos'][2]
@@ -287,7 +287,7 @@ def load_markPoints_connection_file(expt):
             xyz_dif=math.sqrt(x_dif**2+y_dif**2+z_dif**2)
             if xyz_dif < distance: 
                 same = True
-                for hs in expt.electrodes.keys():
+                for hs in list(expt.electrodes.keys()):
                     if points[p1][hs] != points[p2][hs]:
                         same=False
                 if same:
