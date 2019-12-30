@@ -101,23 +101,19 @@ class Dataset(Container):
     Dataset, whereas recordings made from different pieces of tissue probably
     belong in different Datasets.
     """
-    loader_class = None
 
-    def __init__(self, data=None, meta=None, file_path=None, loader_class=None):
+    def __init__(self, data=None, meta=None, loader=None):
         Container.__init__(self)
         self._data = data
         if meta is not None:
             self._meta.update(OrderedDict(meta))
 
-        self._loader = None
-        self.file_path = file_path
-        if loader_class is not None: ## allow overwrite on initialization
-            self.loader_class = loader_class
+        self._loader = loader
 
     @property
     def loader(self):
         if self._loader is None:
-            self._loader = self.loader_class(self.file_path)
+            raise Exception("Dataset needs to be passed either data or a DatasetLoader upon initialization. No loader was specified.")
         return self._loader
     
     @property

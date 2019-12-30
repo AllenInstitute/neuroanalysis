@@ -12,7 +12,7 @@ f2 = "/Users/meganbkratz/Code/ai/example_data/2019_06_24_131623-compressed.nwb"
 
 #hdf = h5py.File(f, 'r')
 
-mies_nwb = Dataset(loader_class=MiesNwbLoader, file_path=f2)
-opto_nwb = Dataset(loader_class=MiesNwbLoader, file_path=f)
+mies_nwb = Dataset(loader=MiesNwbLoader(f2))
+opto_nwb = Dataset(loader=MiesNwbLoader(f))
 
 #old = OptoNwb(f)
