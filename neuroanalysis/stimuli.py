@@ -425,8 +425,9 @@ def find_noisy_square_pulses(trace, baseline=None, amp_threshold=None, std_thres
             stop = changes[i+1] if (i+1 < len(changes)) else len(trace)
             t_start = trace.time_at(start)
             duration = (stop - start) * trace.dt
+            amplitude = trace.data[start:stop].mean() - baseline.mean()
             if duration > min_duration:
-                pulses.append(SquarePulse(start_time=t_start, duration=duration, amplitude=amp, units=trace.units))
+                pulses.append(SquarePulse(start_time=t_start, duration=duration, amplitude=amplitude, units=trace.units))
                 pulses[-1].pulse_number = i
 
     return pulses
