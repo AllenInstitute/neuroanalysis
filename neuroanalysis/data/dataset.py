@@ -42,7 +42,7 @@ class Container(object):
 
     @property
     def top_parent(self):
-        while self.parent is not None:
+        if self.parent is not None:
             return self.parent.top_parent
         return self
     
