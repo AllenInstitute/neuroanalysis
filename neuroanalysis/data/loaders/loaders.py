@@ -1,18 +1,10 @@
-import h5py
-import numpy as np
-from collections import OrderedDict
-from neuroanalysis.data.dataset import SyncRecording, PatchClampRecording, Recording, TSeries
-import neuroanalysis.util.mies_nwb_parsing as parser
-#import aisynphys.pipeline.opto.data_model as dm
-import neuroanalysis.util.device_config as dm
-import neuroanalysis.stimuli as stimuli
-from neuroanalysis.test_pulse import PatchClampTestPulse
+
 
 class DatasetLoader():
     """An abstract base class for Dataset loaders."""
 
     def get_sync_recordings(self, dataset):
-        """Return a list of SyncRecordings."""
+        """Return a tuple (list of SyncRecordings, list of RecordingSequences)."""
         raise NotImplementedError("Must be implemented in subclass.")
 
     def get_recordings(self, sync_rec):

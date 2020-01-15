@@ -101,13 +101,14 @@ class Dataset(Container):
     belong in different Datasets.
     """
 
-    def __init__(self, data=None, meta=None, loader=None):
+    def __init__(self, data=None, meta=None, loader=None, sequences=None):
         Container.__init__(self)
         self._data = data
         if meta is not None:
             self._meta.update(OrderedDict(meta))
 
         self._loader = loader
+        self._sequences = sequences
 
     @property
     def loader(self):
@@ -117,14 +118,21 @@ class Dataset(Container):
     
     @property
     def contents(self):
-        """A list of data objects (TSeries, Recording, SyncRecording, RecordingSequence)
-        directly contained in this experiment.
+        """A list of SyncRecording objects directly contained in this experiment.
         
         Grandchild objects are not included in this list.
         """
         if self._data is None:
-            self._data = self.loader.get_sync_recordings(self)
+            self._data, self._sequences = self.loader.get_sync_recordings(self)
         return self._data[:]
+
+    @property
+    def sequences(self):
+        if self._sequences is None:
+            self.contents
+        return self._sequences
+        
+
 
     def find(self, type):
         return [c for c in self.all_children if isinstance(c, type)]
@@ -208,6 +216,24 @@ class RecordingSequence(Container):
     Items in a sequence are usually SyncRecording instances, but may also be
     nested RecordingSequence instances.
     """
+
+    def __init__(self, parent, name, sync_recs=None, meta=None):
+        Container.__init__(self)
+
+        self._parent = parent
+        self._key = name
+        if meta is not None:
+            self.update_meta(**meta)
+
+        self._sync_recs = []
+        if sync_recs is not None:
+            for sync_rec in sync_recs:
+                self.add_sync_rec(sync_rec)
+
+    def add_sync_rec(self, sync_rec):
+        if sync_rec not in self._sync_recs:
+            self._sync_recs.append(sync_rec)
+
     @property
     def type(self):
         """An arbitrary string representing the type of acquisition.
@@ -249,6 +275,9 @@ class RecordingSequence(Container):
     #     This is a convenience property used for traversing the object hierarchy.
     #     """
     #     return None
+    @property
+    def contents(self):
+        return self._sync_recs
     
     @property
     def children(self):
