@@ -675,7 +675,7 @@ class TSeries(Container):
     Parameters
     ----------
     data : array | None
-        Array of data contained in this TSeries.
+        Array of data contained in this TSeries where the first axis is time.
     dt : float | None
         Optional value specifying the time difference between any two adjacent samples
         in the data; inverse of *sample_rate*. See ``TSeries.dt``.
@@ -702,12 +702,12 @@ class TSeries(Container):
     def __init__(self, data=None, dt=None, t0=None, sample_rate=None, start_time=None, time_values=None, units=None, channel_id=None, recording=None, **meta):
         Container.__init__(self)
         
-        if data is not None and data.ndim != 1:
-            raise ValueError("data must be a 1-dimensional array.")
+        #if data is not None and data.ndim != 1:
+        #    raise ValueError("data must be a 1-dimensional array.")
         
         if time_values is not None:
-            if data is not None and time_values.shape != data.shape:
-                raise ValueError("time_values must have the same shape as data.")
+            if data is not None and time_values.shape[0] != data.shape[0]:
+                raise ValueError("time_values must have the same length as data.")
             if dt is not None:
                 raise TypeError("Cannot specify both time_values and dt.")
             if sample_rate is not None:
