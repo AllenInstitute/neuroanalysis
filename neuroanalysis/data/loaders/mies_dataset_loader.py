@@ -7,37 +7,7 @@ import neuroanalysis.util.mies_nwb_parsing as parser
 import neuroanalysis.util.device_config as dm
 import neuroanalysis.stimuli as stimuli
 from neuroanalysis.test_pulse import PatchClampTestPulse
-
-class DatasetLoader():
-    """An abstract base class for Dataset loaders."""
-
-    def get_sync_recordings(self, dataset):
-        """Return a list of SyncRecordings."""
-        raise NotImplementedError("Must be implemented in subclass.")
-
-    def get_recordings(self, sync_rec):
-        """Return a dict of {device: Recording}"""
-        raise NotImplementedError("Must be implemented in subclass.")
-
-    def get_tseries_data(self, tseries):
-        """Return a numpy array of the data in the tseries."""
-        raise NotImplementedError("Must be implemented in subclass.")
-
-    def load_stimulus(self, recording):
-        """Return an instance of stimuli.Stimulus"""
-        raise NotImplementedError("Must be implemented in subclass.")
-
-    def load_stimulus_items(self, recording):
-        """Return a list of Stimulus instances. 
-        Used with LazyLoadStimulus to parse stimuli when they are needed."""
-        raise NotImplementedError("Must be implemented in subclass.")
-
-    def load_test_pulse(self, recording):
-        """Return a PatchClampTestPulse."""
-        raise NotImplementedError("Must be implemented in subclass.")
-
-    def find_nearest_test_pulse(self, recording):
-        raise NotImplementedError("Must be implemented in subclass.")
+from neuroanalysis.data.loaders.loaders import DatasetLoader
 
 
 class MiesNwbLoader(DatasetLoader):
@@ -103,7 +73,7 @@ class MiesNwbLoader(DatasetLoader):
         sweeps = []
         for sweep_id in sweep_ids:
             sweeps.append(SyncRecording(parent=dataset, key=sweep_id))
-        return sweeps 
+        return (sweeps, []) ### no recording sequences
 
 
     def get_recordings(self, sync_rec):
@@ -321,6 +291,7 @@ class MiesNwbLoader(DatasetLoader):
     def load_stimulus(self, rec):
         desc = self.hdf['acquisition/timeseries'][rec.meta['sweep_name']]['stimulus_description'][()][0]
         return stimuli.LazyLoadStimulus(description=desc, loader=self, source=rec)
+        #return stimuli.Stimulus(description=desc, items=self.load_stimulus_items(rec))
 
     def load_stimulus_items(self, rec):
         items = []
