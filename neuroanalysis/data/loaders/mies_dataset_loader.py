@@ -65,6 +65,9 @@ class MiesNwbLoader(DatasetLoader):
             self._device_config = dm.get_device_config(self.notebook)
         return self._device_config
 
+    def get_dataset_name(self):
+        return self._file_path
+
     def get_sync_recordings(self, dataset):
         ### miesnwb parses sweeps and contents into nwb._timeseries -- this happens in a hidden way inside nwb.contents()
         ## other classes (sync_recordings, etc) then use nwb._timeseries to look up their data by sweep number

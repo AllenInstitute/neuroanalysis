@@ -101,9 +101,10 @@ class Dataset(Container):
     belong in different Datasets.
     """
 
-    def __init__(self, data=None, meta=None, loader=None, sequences=None):
+    def __init__(self, data=None, meta=None, loader=None, sequences=None, name=None):
         Container.__init__(self)
         self._data = data
+        self._name = name
         if meta is not None:
             self._meta.update(OrderedDict(meta))
 
@@ -113,7 +114,7 @@ class Dataset(Container):
     @property
     def loader(self):
         if self._loader is None:
-            raise Exception("Dataset needs to be passed either data or a DatasetLoader upon initialization. No loader was specified.")
+            raise Exception("No loader was specified upon initialization.")
         return self._loader
     
     @property
@@ -131,8 +132,15 @@ class Dataset(Container):
         if self._sequences is None:
             self.contents
         return self._sequences
-        
 
+    @property
+    def name(self):
+        if self._name is None:
+            self._name = self.loader.get_dataset_name()
+        return self._name
+
+    def __repr__(self):
+        return "<%s %s>" % (self.__class__.__name__, self.name)
 
     def find(self, type):
         return [c for c in self.all_children if isinstance(c, type)]
@@ -230,6 +238,9 @@ class RecordingSequence(Container):
             for sync_rec in sync_recs:
                 self.add_sync_rec(sync_rec)
 
+    def __repr__(self):
+        return "<%s %s>" % (self.__class__.__name__, self.key)
+
     def add_sync_rec(self, sync_rec):
         if sync_rec not in self._sync_recs:
             self._sync_recs.append(sync_rec)
@@ -299,6 +310,9 @@ class SyncRecording(Container):
         self._parent = parent
         self._recording_dict = recordings #if recordings is not None else OrderedDict()
         self._key = key
+
+    def __repr__(self):
+        return "<%s key=%s>" % (self.__class__.__name__, str(self.key))
 
     @property
     def type(self):
@@ -424,6 +438,9 @@ class Recording(Container):
     @property
     def children(self):
         return [self[k] for k in self.channels]
+
+    def __repr__(self):
+        return "<%s device:%s, channels:%s>" %(self.__class__.__name__, self.device_type, str(self.channels))
 
 
 class RecordingView(Recording):
@@ -652,9 +669,10 @@ class PatchClampRecording(Recording):
             if hc is not None:
                 hc = int(np.round(hc*1e12))
             extra = "mode=IC holding=%s" % hc
+        return extra
 
     def __repr__(self):
-        return "<%s %s>" % (self.__class__.__name__, self._descr())
+        return "<%s device:%s %s>" % (self.__class__.__name__, str(self.device_id), self._descr())
 
 
 class TSeries(Container):
