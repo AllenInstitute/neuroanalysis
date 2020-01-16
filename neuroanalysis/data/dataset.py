@@ -415,7 +415,8 @@ class Recording(Container):
         return self._channels[chan]
 
     def data(self):
-        return np.concatenate([self[ch].data[:,None] for ch in self.channels], axis=1)
+        #return np.concatenate([self[ch].data[:,None] for ch in self.channels], axis=1)
+        return np.stack([self[ch].data for ch in self.channels], axis=-1)
 
     # @property
     # def parent(self):
