@@ -2,6 +2,10 @@
 
 class DatasetLoader():
     """An abstract base class for Dataset loaders."""
+    
+    def get_dataset_name(self):
+        """Return a string with the name of this dataset."""
+        raise NotImplementedError("Must be implemented in subclass.")
 
     def get_sync_recordings(self, dataset):
         """Return a tuple (list of SyncRecordings, list of RecordingSequences)."""

@@ -18,6 +18,9 @@ class Acq4DatasetLoader(DatasetLoader):
             self._dh = DataManager.getDirHandle(self._filepath)
         return self._dh
 
+    def get_dataset_name(self):
+        return self._filepath
+
     def get_sync_recordings(self, dataset):
         """Return a list of SyncRecordings."""
 
