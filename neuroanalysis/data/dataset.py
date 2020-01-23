@@ -606,6 +606,7 @@ class PatchClampRecording(Recording):
         #         data = np.empty(0, dtype=self['primary'].data.dtype)
         #     else:
         #         data = np.concatenate(data)
+        #     data = data[np.isfinite(data)]
         #     self._baseline_data = TSeries(data, sample_rate=self['primary'].sample_rate, recording=self)
         # return self._baseline_data
 

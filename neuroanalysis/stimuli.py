@@ -375,7 +375,7 @@ def find_square_pulses(trace, baseline=None):
     Parameters
     ----------
     trace : TSeries instance
-        The stimulus command waveform. This data should be noise-free.
+        The stimulus command waveform. This data should be noise-free and nan-free.
     baseline : float | None
         Specifies the value in the command waveform that is considered to be
         "no pulse". If no baseline is specified, then the first sample of
