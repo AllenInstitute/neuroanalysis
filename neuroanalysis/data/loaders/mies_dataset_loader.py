@@ -11,9 +11,12 @@ from neuroanalysis.data.loaders.loaders import DatasetLoader
 
 
 class MiesNwbLoader(DatasetLoader):
+    _baseline_analyzer_class = None ## make room for subclasses to automatically supply baseline analyzers
 
-    def __init__(self, file_path):
+    def __init__(self, file_path, baseline_analyzer_class=None):
         self._file_path = file_path
+        if baseline_analyzer_class is not None:
+            self._baseline_analyzer_class = baseline_analyzer_class
 
         self._time_series = None ## parse nwb into sweep_number: info dictionary for lookup of individual sweeps
         self._notebook = None ## parse the lab_notebook part of the nwb 
@@ -429,6 +432,12 @@ class MiesNwbLoader(DatasetLoader):
                     items.append(item)
 
         return items
+
+    def get_baseline_regions(self, recording):
+        if self._baseline_analyzer_class is None:
+            raise Exception("Cannot get baseline regions, no baseline analyzer class was supplied upon initialization.")
+
+        return self._baseline_analyzer_class.get(recording.sync_recording).baseline_regions
 
 
 

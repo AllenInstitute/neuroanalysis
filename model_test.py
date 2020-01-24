@@ -3,6 +3,7 @@ import h5py
 from neuroanalysis.data.loaders.mies_dataset_loader import MiesNwbLoader
 from neuroanalysis.data.loaders.acq4_dataset_loader import Acq4DatasetLoader
 from neuroanalysis.data.dataset import Dataset
+from optoanalysis.analyzers import OptoBaselineAnalyzer
 import pyqtgraph as pg
 
 pg.dbg()
@@ -15,7 +16,7 @@ f3 = "/Users/meganbkratz/Documents/ManisLab/L4Mapping/ExcitationProfileData/2012
 #hdf = h5py.File(f, 'r')
 
 mies_nwb = Dataset(loader=MiesNwbLoader(f2))
-opto_nwb = Dataset(loader=MiesNwbLoader(f))
+opto_nwb = Dataset(loader=MiesNwbLoader(f, baseline_analyzer_class=OptoBaselineAnalyzer))
 acq4_dataset = Dataset(loader=Acq4DatasetLoader(f3))
 
 #old = OptoNwb(f)

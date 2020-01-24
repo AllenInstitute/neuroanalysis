@@ -35,4 +35,7 @@ class DatasetLoader():
     def find_nearest_test_pulse(self, recording):
         raise NotImplementedError("Must be implemented in subclass.")
 
+    def get_baseline_regions(self, recording):
+        raise NotImplementedError("Must be implemented in subclass.")
+
 
