@@ -183,15 +183,15 @@ class PatchClampStimPulseAnalyzer(GenericStimPulseAnalyzer):
         """Return a list of (start_time, stop_time, amp) tuples describing square pulses
         in the stimulus.
         """
-        if self._pulses is None:
+        if self._pulses.get(channel) is None:
             trace = self.rec[channel]
             pulses = find_square_pulses(trace)
-            self._pulses = []
+            self._pulses[channel] = []
             for p in pulses:
                 start = p.global_start_time
                 stop = p.global_start_time + p.duration
-                self._pulses.append((start, stop, p.amplitude))
-        return self._pulses
+                self._pulses[channel].append((start, stop, p.amplitude))
+        return self._pulses[channel]
 
     def pulse_chunks(self):
         """Return time-slices of this recording where evoked spikes are expected to be found (one chunk
