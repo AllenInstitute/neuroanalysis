@@ -4,7 +4,6 @@ from collections import OrderedDict
 from neuroanalysis.data.dataset import SyncRecording, PatchClampRecording, Recording, TSeries
 import neuroanalysis.util.mies_nwb_parsing as parser
 #import aisynphys.pipeline.opto.data_model as dm
-import neuroanalysis.util.device_config as dm
 import neuroanalysis.stimuli as stimuli
 from neuroanalysis.test_pulse import PatchClampTestPulse
 from neuroanalysis.data.loaders.loaders import DatasetLoader
@@ -56,18 +55,6 @@ class MiesNwbLoader(DatasetLoader):
             self._notebook = parser.parse_lab_notebook(self.hdf)
         return self._notebook
 
-    @property
-    def rig(self):
-        if self._rig is None:
-            self._rig = dm.get_rig_from_nwb(notebook=self.notebook)
-        return self._rig
-
-    @property
-    def device_config(self):
-        if self._device_config is None:
-            self._device_config = dm.get_device_config(self.notebook)
-        return self._device_config
-
     def get_dataset_name(self):
         return self._file_path
 
@@ -86,6 +73,14 @@ class MiesNwbLoader(DatasetLoader):
         ### return {device: recording}
         recordings = {}
         sweep_id = sync_rec.key
+
+        ### Hardcode this now, figure out configuration system when needed
+        device_map = {
+            'AD6': 'Fidelity',
+            'TTL1_0': 'Prairie_Command',
+            'TTL1_1': 'LED-470nm',
+            'TTL1_2': 'LED-590nm'
+        }
 
         for ch, meta in self.time_series[sweep_id].items():
             if 'data_%05d_AD%d' %(sweep_id, ch) in self.hdf['acquisition/timeseries'].keys():
@@ -147,7 +142,7 @@ class MiesNwbLoader(DatasetLoader):
                     meta['sweep_name'] = 'data_%05d_AD%d'%(sweep_id, ch)
                     start_time = parser.igorpro_date(nb['TimeStamp'])
                     #device = 'Fidelity' ## do this for right now, implement lookup in the future
-                    device = self.device_config[meta['sweep_name'][-3:]]
+                    device = device_map[meta['sweep_name'][-3:]]
 
                     rec = Recording(
                         #channels = {'reporter':TSeries(data=np.array(data), dt=dt)},
@@ -169,7 +164,7 @@ class MiesNwbLoader(DatasetLoader):
                     #ttl_num = k.split('_')[-1]
                     #device = self.device_config['TTL1_%s'%ttl_num]
                     ttl = k.split('_', 2)[-1]
-                    device = self.device_config[ttl]
+                    device = device_map[ttl]
 
                     meta={}
                     meta['sweep_name'] = k
