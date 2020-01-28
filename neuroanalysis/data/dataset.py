@@ -31,20 +31,27 @@ class Container(object):
     
     This class is the basis for most other classes in the DAL.
     """
-    def __init__(self):
+    def __init__(self, loader=None):
         self._meta = OrderedDict()
         self._key = None
         self._parent = None
+        self._loader = loader
+
+    @property
+    def loader(self):
+        if self._loader is None:
+            raise Exception("No loader was specified upon initialization.")
+        return self._loader
         
     @property
     def parent(self):
         return self._parent
 
-    @property
-    def top_parent(self):
-        if self.parent is not None:
-            return self.parent.top_parent
-        return self
+    # @property
+    # def top_parent(self):
+    #     if self.parent is not None:
+    #         return self.parent.top_parent
+    #     return self
     
     @property
     def children(self):
@@ -100,23 +107,33 @@ class Dataset(Container):
     a series of recordings made on the same cell almost certainly belong in the same
     Dataset, whereas recordings made from different pieces of tissue probably
     belong in different Datasets.
+
+    Parameters
+    ----------
+    data : list of SyncRecordings | None
+        A list of SyncRecordings in the dataset. If None, they will be loaded when needed with loader
+    meta : dict | None
+        An optional dict of metadata about the dataset.
+    loader : a class | None
+        A class which contains functions for loading data. Must include:
+            get_sync_recordings(self) - Return a tuple of (list of SyncRecordings, list of RecordingSequences) in this dataset
+            get_dataset_name(self) - Return the name of this dataset (str)
+    sequences: list of RecordingSequences | None
+        A list of RecordingSequences in this dataset. If None they will be loaded when needed with loader
+    name : str | None
+        The name of this dataset. If None, will be loaded when needed with loader
+
     """
 
     def __init__(self, data=None, meta=None, loader=None, sequences=None, name=None):
-        Container.__init__(self)
+        Container.__init__(self, loader=loader)
         self._data = data
         self._name = name
         if meta is not None:
             self._meta.update(OrderedDict(meta))
 
-        self._loader = loader
+        #self._loader = loader
         self._sequences = sequences
-
-    @property
-    def loader(self):
-        if self._loader is None:
-            raise Exception("No loader was specified upon initialization.")
-        return self._loader
     
     @property
     def contents(self):
@@ -226,8 +243,8 @@ class RecordingSequence(Container):
     nested RecordingSequence instances.
     """
 
-    def __init__(self, parent, name, sync_recs=None, meta=None):
-        Container.__init__(self)
+    def __init__(self, parent, name, sync_recs=None, meta=None, loader=None):
+        Container.__init__(self, loader=loader)
 
         self._parent = parent
         self._key = name
@@ -305,9 +322,22 @@ class SyncRecording(Container):
 
     This is typically the result of recording from multiple devices at the same time
     (for example, two patch-clamp amplifiers and a camera).
+
+    Parameters
+    ----------
+    recordings : list of Recordings | None
+        A list of Recordings in this sync_recording. If None, will be loaded when needed with loader.
+    parent : Dataset | None
+        The dataset this sync recording is part of.
+    key : 
+        A id for this sync recording that is unique among its siblings
+    loader : a class | None
+        A class which contains functions for loading data in the sync recording. Must have these methods:
+            get_recordings(self) - Return a dict of {device: Recording}
+
     """
-    def __init__(self, recordings=None, parent=None, key=None):
-        Container.__init__(self)
+    def __init__(self, recordings=None, parent=None, key=None, loader=None):
+        Container.__init__(self, loader=loader)
         self._parent = parent
         self._recording_dict = recordings #if recordings is not None else OrderedDict()
         self._key = key
@@ -324,7 +354,7 @@ class SyncRecording(Container):
     @property
     def recording_dict(self):
         if self._recording_dict is None:
-            self._recording_dict = self.top_parent.loader.get_recordings(self)
+            self._recording_dict = self.loader.get_recordings(self)
         return self._recording_dict
 
     @property
@@ -373,9 +403,25 @@ class Recording(Container):
     
     Each channel is described by a single TSeries instance. Channels are often 
     recorded with the same timebase, but this is not strictly required.
+
+    Parameters
+    ----------
+    channels : dict | None
+        A {name : TSeries} dict of the channels in this recording. 
+    start_time : ? | None
+        The start time of this recording.
+    device_type : str | None
+        The type of device that made this recording.
+    device_id : ? | None
+        The id of the device that made this recording.
+    sync_recording : SyncRecording | None
+        The parent sync recording this recording is part of.
+    loader : a class | None
+        A loader class for loading information not supplied at initialization. No required functions yet.
+
     """
-    def __init__(self, channels=None, start_time=None, device_type=None, device_id=None, sync_recording=None, **meta):
-        Container.__init__(self)
+    def __init__(self, channels=None, start_time=None, device_type=None, device_id=None, sync_recording=None, loader=None, **meta):
+        Container.__init__(self, loader=loader)
         self._meta = OrderedDict([
             ('start_time', start_time),
             ('device_type', device_type),
@@ -496,6 +542,13 @@ class PatchClampRecording(Recording):
     Should have at least 'primary' and 'command' channels.
 
     Note: command channel values should _include_ holding potential/current!
+
+    Loader class needs methods:
+        load_stimulus(self) - Return a neuroanalysis.stimuli.Stimulus object 
+        load_test_pulse(self) - Return a neuroanalysis.test_pulse.PatchClampTestPulse object or None
+        find_nearest_test_pulse(self) - Return the neuroanalysis.test_pulse.PatchClampTestPulse object recorded closest in time to this recording.
+        get_baseline_regions(self) - Return a list of (start, stop) time pairs when we can expect this recording to be in a quiescent state.
+
     """
     def __init__(self, *args, **kwds):
         meta = OrderedDict()
@@ -535,8 +588,11 @@ class PatchClampRecording(Recording):
 
     @property
     def stimulus(self):
+        #### Is there a good reason only PatchClampRecordings should have a stimulus property. I'm thinking 
+        #### this should be moved to recording it might make sense for Fidelity or LED recordings to also have a stimulus
+        ####    -- in this case loader will be responsible for deciding whether or not a recording has a stimulus and for loading it.
         if self._meta.get('stimulus') is None:
-            self._meta['stimulus'] = self.top_parent.loader.load_stimulus(self)
+            self._meta['stimulus'] = self.loader.load_stimulus(self)
         return self._meta.get('stimulus')
 
     @property
@@ -572,7 +628,7 @@ class PatchClampRecording(Recording):
     @property
     def test_pulse(self):
         if self._test_pulse is None:
-            self._test_pulse = self.top_parent.loader.load_test_pulse(self)
+            self._test_pulse = self.loader.load_test_pulse(self)
         return self._test_pulse ## may still be None
 
     @property
@@ -583,7 +639,7 @@ class PatchClampRecording(Recording):
             return self.test_pulse
 
         if self._nearest_test_pulse is None:
-            self._nearest_test_pulse = self.top_parent.loader.find_nearest_test_pulse(self)
+            self._nearest_test_pulse = self.loader.find_nearest_test_pulse(self)
 
         return self._nearest_test_pulse
 
@@ -593,7 +649,7 @@ class PatchClampRecording(Recording):
         the cell is expected to be in a steady state.
         """
         if self._baseline_regions is None:
-            self._baseline_regions = self.top_parent.loader.get_baseline_regions(self)
+            self._baseline_regions = self.loader.get_baseline_regions(self)
         return self._baseline_regions
         #raise Exception('PatchClampRecording.baseline_regions is deprecated. Please use an Analyzer to find baseline_regions instead.')
 
@@ -718,11 +774,18 @@ class TSeries(Container):
         Optional string specifying the units associated with *data*. It is recommended
         to use unscaled SI units (e.g. 'V' instead of 'mV') where possible.
         See ``TSeries.units``.
+    channel_id : str | None
+        The name of the Recording channel that contains this TSeries
+    recording : Recording | None
+        The Recording this TSeries is part of.
+    loader : a class | None
+        A class containing functions for loading data. Required methods:
+            get_tseries_data(self) - return a numpy array of values
     meta : 
         Any extra keyword arguments are interpreted as custom metadata and added to ``self.meta``.
     """
-    def __init__(self, data=None, dt=None, t0=None, sample_rate=None, start_time=None, time_values=None, units=None, channel_id=None, recording=None, **meta):
-        Container.__init__(self)
+    def __init__(self, data=None, dt=None, t0=None, sample_rate=None, start_time=None, time_values=None, units=None, channel_id=None, recording=None, loader=None, **meta):
+        Container.__init__(self, loader=loader)
         
         #if data is not None and data.ndim != 1:
         #    raise ValueError("data must be a 1-dimensional array.")
@@ -760,7 +823,7 @@ class TSeries(Container):
         """The array of sample values.
         """
         if self._data is None:
-            self._data = self.top_parent.loader.get_tseries_data(self)
+            self._data = self.loader.get_tseries_data(self)
         return self._data
         
     @property

@@ -65,7 +65,7 @@ class MiesNwbLoader(DatasetLoader):
         sweep_ids = sorted(list(self.time_series.keys()))
         sweeps = []
         for sweep_id in sweep_ids:
-            sweeps.append(SyncRecording(parent=dataset, key=sweep_id))
+            sweeps.append(SyncRecording(parent=dataset, key=sweep_id, loader=self))
         return (sweeps, []) ### no recording sequences
 
 
@@ -119,12 +119,13 @@ class MiesNwbLoader(DatasetLoader):
 
 
                     rec = PatchClampRecording(### this makes TSeries when we make Recordings instead of waiting until recordings ask for their TSeries -- which is something I've been trying to get away from in the rest of this refactor
-                        channels={'primary':TSeries(channel_id='primary', dt=dt, start_time=start_time), 
-                                  'command':TSeries(channel_id='command', dt=dt, start_time=start_time)},
+                        channels={'primary':TSeries(channel_id='primary', dt=dt, start_time=start_time, loader=self), 
+                                  'command':TSeries(channel_id='command', dt=dt, start_time=start_time, loader=self)},
                         start_time=start_time,
                         device_type="MultiClamp 700",
                         device_id=device_id,
                         sync_recording=sync_rec,
+                        loader=self,
                         **meta
                         )
                     rec['primary']._recording = rec
@@ -146,10 +147,11 @@ class MiesNwbLoader(DatasetLoader):
 
                     rec = Recording(
                         #channels = {'reporter':TSeries(data=np.array(data), dt=dt)},
-                        channels = {'reporter':TSeries(channel_id='reporter', dt=dt, start_time=start_time)},
+                        channels = {'reporter':TSeries(channel_id='reporter', dt=dt, start_time=start_time, loader=self)},
                         device_type = device, 
                         device_id=device, 
                         sync_recording = sync_rec,
+                        loader=self,
                         **meta)
                     rec['reporter']._recording = rec
 
@@ -170,10 +172,11 @@ class MiesNwbLoader(DatasetLoader):
                     meta['sweep_name'] = k
 
                     rec = Recording(
-                        channels={'reporter':TSeries(channel_id='reporter', dt=dt)},
+                        channels={'reporter':TSeries(channel_id='reporter', dt=dt, loader=self)},
                         device_type = device,
                         device_id=device,
                         sync_recording=sync_rec,
+                        loader=self,
                         **meta)
                     rec['reporter']._recording = rec
 
@@ -290,8 +293,11 @@ class MiesNwbLoader(DatasetLoader):
         return nearest
 
     def load_stimulus(self, rec):
-        desc = self.hdf['acquisition/timeseries'][rec.meta['sweep_name']]['stimulus_description'][()][0]
-        return stimuli.LazyLoadStimulus(description=desc, loader=self, source=rec)
+        if isinstance(rec, PatchClampRecording):
+            desc = self.hdf['acquisition/timeseries'][rec.meta['sweep_name']]['stimulus_description'][()][0]
+            return stimuli.LazyLoadStimulus(description=desc, loader=self, source=rec)
+        else:
+            raise Exception('not implemented yet')
         #return stimuli.Stimulus(description=desc, items=self.load_stimulus_items(rec))
 
     def load_stimulus_items(self, rec):
@@ -430,7 +436,7 @@ class MiesNwbLoader(DatasetLoader):
 
     def get_baseline_regions(self, recording):
         if self._baseline_analyzer_class is None:
-            raise Exception("Cannot get baseline regions, no baseline analyzer class was supplied upon initialization.")
+            raise Exception("Cannot get baseline regions, no baseline analyzer class was supplied upon initialization of %s." % self.__class__.__name__)
 
         return self._baseline_analyzer_class.get(recording.sync_recording).baseline_regions
 
