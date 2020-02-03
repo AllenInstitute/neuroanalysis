@@ -28,22 +28,28 @@ class Acq4DatasetLoader(DatasetLoader):
         sequences = []
 
         for seq in self.dh.subDirs():
-            if self.dh[seq].info().get('dirType') == 'ProtocolSequence':    
-                sequence = RecordingSequence(parent=dataset, name=seq) 
+            if self.dh[seq].info().get('dirType') == 'ProtocolSequence':
+                params = self.dh[seq].info()['sequenceParams']   
+                sequence = RecordingSequence(parent=dataset, name=seq, meta={'sequence_params':params}, loader=self) 
                 for sd in self.dh[seq].subDirs():
-                    srec = SyncRecording(parent=dataset, key=(seq,sd))
+                    sdh = self.dh[seq][sd]
+                    meta = {'sequence_params':{}}
+                    for k in params.keys():
+                        meta['sequence_params'][k] = params[k][sdh.info().get(k)]
+                    srec = SyncRecording(parent=dataset, key=(seq,sd), meta=meta, loader=self)
                     sequence.add_sync_rec(srec)
                     sync_recs.append(srec)
                 sequences.append(sequence)
             elif self.dh[seq].info().get('dirType') == 'Protocol':
-                srec = SyncRecording(parent=dataset, key=(seq))
+                srec = SyncRecording(parent=dataset, key=(seq), loader=self)
                 sync_recs.append(srec)
             elif self.dh[seq].shortName() == 'Patch': ## ignore this for now -- how should this data be represented?
                 continue
             else:
                 raise Exception('Not sure how to handle folder %s' % self.dh[seq].name())
 
-        return (sync_recs, sequences)
+        #return (sync_recs, sequences)
+        return sync_recs
         
 
     def get_recordings(self, sync_rec):
@@ -82,12 +88,13 @@ class Acq4DatasetLoader(DatasetLoader):
                 dt = data.axisValues(1)[1] - data.axisValues(1)[0]
 
                 rec = PatchClampRecording(
-                    channels={'primary':TSeries(channel_id='primary', data=data['primary'].asarray(), dt=dt, units=data.columnUnits(0, 'primary')),
-                              'command':TSeries(channel_id='command', data=data['command'].asarray(), dt=dt, units=data.columnUnits(0, 'command'))},
+                    channels={'primary':TSeries(channel_id='primary', data=data['primary'].asarray(), dt=dt, units=data.columnUnits(0, 'primary'), loader=self),
+                              'command':TSeries(channel_id='command', data=data['command'].asarray(), dt=dt, units=data.columnUnits(0, 'command'), loader=self)},
                     start_time=start_time, 
                     device_type='patch clamp amplifier', 
-                    device_id=None,
+                    device_id=f.shortName().strip('.ma'),
                     sync_recording=sync_rec,
+                    loader=self,
                     **meta
                     )
                 rec['primary']._recording = rec
@@ -104,9 +111,9 @@ class Acq4DatasetLoader(DatasetLoader):
                 #dt = data.axisValues(time_axis)[1] - data.axisValues(time_axis)[0]
 
                 if data.ndim == 2:
-                    channels = {k:TSeries(channel_id=k, data=data[k].asarray(), time_values=data.axisValues(time_axis), units=data.columnUnits(channel_axis, k)) for k in data.listColumns(channel_axis)}
+                    channels = {k:TSeries(channel_id=k, data=data[k].asarray(), time_values=data.axisValues(time_axis), units=data.columnUnits(channel_axis, k), loader=self) for k in data.listColumns(channel_axis)}
                 elif data.ndim == 3:
-                    channels = {'frames':TSeries(channel_id='frames', data=data.asarray(), time_values=data.axisValues(time_axis))}
+                    channels = {'frames':TSeries(channel_id='frames', data=data.asarray(), time_values=data.axisValues(time_axis), loader=self)}
 
                 rec = Recording(
                     channels=channels,
@@ -114,6 +121,7 @@ class Acq4DatasetLoader(DatasetLoader):
                     device_type=f.name(relativeTo=dh).strip('.ma'),
                     sync_recording=sync_rec,
                     file_name=f.name(),
+                    loader=self,
                     **data.infoCopy()[-1]
                     )
 

@@ -133,7 +133,7 @@ class Dataset(Container):
             self._meta.update(OrderedDict(meta))
 
         #self._loader = loader
-        self._sequences = sequences
+        #self._sequences = sequences
     
     @property
     def contents(self):
@@ -142,14 +142,14 @@ class Dataset(Container):
         Grandchild objects are not included in this list.
         """
         if self._data is None:
-            self._data, self._sequences = self.loader.get_sync_recordings(self)
+            self._data = self.loader.get_sync_recordings(self)
         return self._data[:]
 
-    @property
-    def sequences(self):
-        if self._sequences is None:
-            self.contents
-        return self._sequences
+    # @property
+    # def sequences(self):
+    #     if self._sequences is None:
+    #         self.contents
+    #     return self._sequences
 
     @property
     def name(self):
@@ -267,35 +267,40 @@ class RecordingSequence(Container):
     def type(self):
         """An arbitrary string representing the type of acquisition.
         """
-        pass
+        return self._meta.get('type', None)
 
-    @property
-    def shape(self):
-        """The array-shape of the sequence.
-        """
+    # @property
+    # def shape(self):
+    #     """The array-shape of the sequence.
+    #     """
 
-    @property
-    def ndim(self):
-        return len(self.shape)
+    # @property
+    # def ndim(self):
+    #     return len(self.shape)
 
-    def __getitem__(self, item):
-        """Return one item (a SyncRecording instance) from the sequence.
-        """
+    # def __getitem__(self, item):
+    #     """Return one item (a SyncRecording instance) from the sequence.
+    #     """
 
     def sequence_params(self):
-        """Return a structure that describes the parameters that are varied across each
-        axis of the sequence.
-
-        For example, a two-dimensional sequence might return the following:
-
-            [
-                [param1, param2],   # two parameters that vary across the first sequence axis
-                [],  # no parameters vary across the second axis (just repetitions)
-                [param3],  # one parameter that varies across all recordings, regardless of its position along any axis
-            ]
-
-        Each parameter must be a key in the metadata for a single recording.
         """
+        Return a dictionary of {param_name:values}.
+
+        ## maybe in the future:
+        //Return a structure that describes the parameters that are varied across each
+        //axis of the sequence.
+
+        //For example, a two-dimensional sequence might return the following:
+        //
+        //    [
+        //        [param1, param2],   # two parameters that vary across the first sequence axis
+        //        [],  # no parameters vary across the second axis (just repetitions)
+        //        [param3],  # one parameter that varies across all recordings, regardless of its position along any axis
+        //    ]
+
+        //Each parameter must be a key under 'sequence_params' in the meta data for a single syncrecording.
+        """
+        return self._meta.get('sequence_params')
 
     # @property
     # def parent(self):
@@ -336,11 +341,13 @@ class SyncRecording(Container):
             get_recordings(self) - Return a dict of {device: Recording}
 
     """
-    def __init__(self, recordings=None, parent=None, key=None, loader=None):
+    def __init__(self, recordings=None, parent=None, key=None, meta=None, loader=None):
         Container.__init__(self, loader=loader)
         self._parent = parent
         self._recording_dict = recordings #if recordings is not None else OrderedDict()
         self._key = key
+        if meta is not None:
+            self.update_meta(**meta)
 
     def __repr__(self):
         return "<%s key=%s>" % (self.__class__.__name__, str(self.key))
