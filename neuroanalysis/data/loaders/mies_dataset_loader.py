@@ -66,8 +66,7 @@ class MiesNwbLoader(DatasetLoader):
         sweeps = []
         for sweep_id in sweep_ids:
             sweeps.append(SyncRecording(parent=dataset, key=sweep_id, loader=self))
-        return (sweeps, []) ### no recording sequences
-
+        return sweeps 
 
     def get_recordings(self, sync_rec):
         ### return {device: recording}
