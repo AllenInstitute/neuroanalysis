@@ -221,105 +221,112 @@ class Dataset(Container):
     
     
 
-class RecordingSequence(Container):
+# class RecordingSequence(Container):
+
+# For now, possibly forever, remove the concept of Sequences from datasets. 
+# It is too hard to decide programatically which sync recordings should make up a sequence,
+# and it is likely that that will change or be highly specific to each type of experiment,
+# and will likely involve manual annotation.
+# So, I think that sorting sync recordings into sequences should be something that happens at a 
+# higher level than loading datasets. 
     
-    #  Acquisition?
-    #  RecordingSet?
+#     #  Acquisition?
+#     #  RecordingSet?
     
-    #  Do we need both SyncRecordingSequence and RecordingSequence ?
-    #  Can multiple RecordingSequence instances refer to the same underlying sequence?
-    #    - Let's say no--otherwise we have to worry about unique identification, comparison, etc.
-    #    - Add ___View classes that slice/dice any way we like.
+#     #  Do we need both SyncRecordingSequence and RecordingSequence ?
+#     #  Can multiple RecordingSequence instances refer to the same underlying sequence?
+#     #    - Let's say no--otherwise we have to worry about unique identification, comparison, etc.
+#     #    - Add ___View classes that slice/dice any way we like.
     
-    """Representation of a sequence of data acquisitions.
+#     """Representation of a sequence of data acquisitions.
 
-    For example, this could be a single type of acquisition that was repeated ten times,
-    or a series of ten acquisitions that varies one parameter across ten values.
-    Usually the recordings in a sequence all use the same set of devices.
+#     For example, this could be a single type of acquisition that was repeated ten times,
+#     or a series of ten acquisitions that varies one parameter across ten values.
+#     Usually the recordings in a sequence all use the same set of devices.
 
-    Sequences may be multi-dimensional and may vary more than one parameter.
+#     Sequences may be multi-dimensional and may vary more than one parameter.
     
-    Items in a sequence are usually SyncRecording instances, but may also be
-    nested RecordingSequence instances.
-    """
+#     Items in a sequence are usually SyncRecording instances, but may also be
+#     nested RecordingSequence instances.
+#     """
 
-    def __init__(self, parent, name, sync_recs=None, meta=None, loader=None):
-        Container.__init__(self, loader=loader)
+#     def __init__(self, parent, name, sync_recs=None, meta=None, loader=None):
+#         Container.__init__(self, loader=loader)
 
-        self._parent = parent
-        self._key = name
-        if meta is not None:
-            self.update_meta(**meta)
+#         self._parent = parent
+#         self._key = name
+#         if meta is not None:
+#             self.update_meta(**meta)
 
-        self._sync_recs = []
-        if sync_recs is not None:
-            for sync_rec in sync_recs:
-                self.add_sync_rec(sync_rec)
+#         self._sync_recs = []
+#         if sync_recs is not None:
+#             for sync_rec in sync_recs:
+#                 self.add_sync_rec(sync_rec)
 
-    def __repr__(self):
-        return "<%s %s>" % (self.__class__.__name__, self.key)
+#     def __repr__(self):
+#         return "<%s %s>" % (self.__class__.__name__, self.key)
 
-    def add_sync_rec(self, sync_rec):
-        if sync_rec not in self._sync_recs:
-            self._sync_recs.append(sync_rec)
+#     def add_sync_rec(self, sync_rec):
+#         if sync_rec not in self._sync_recs:
+#             self._sync_recs.append(sync_rec)
 
-    @property
-    def type(self):
-        """An arbitrary string representing the type of acquisition.
-        """
-        return self._meta.get('type', None)
+#     @property
+#     def type(self):
+#         """An arbitrary string representing the type of acquisition.
+#         """
+#         return self._meta.get('type', None)
 
-    # @property
-    # def shape(self):
-    #     """The array-shape of the sequence.
-    #     """
+#     # @property
+#     # def shape(self):
+#     #     """The array-shape of the sequence.
+#     #     """
 
-    # @property
-    # def ndim(self):
-    #     return len(self.shape)
+#     # @property
+#     # def ndim(self):
+#     #     return len(self.shape)
 
-    # def __getitem__(self, item):
-    #     """Return one item (a SyncRecording instance) from the sequence.
-    #     """
+#     # def __getitem__(self, item):
+#     #     """Return one item (a SyncRecording instance) from the sequence.
+#     #     """
 
-    def sequence_params(self):
-        """
-        Return a dictionary of {param_name:values}.
+#     def sequence_params(self):
+#         """
+#         Return a dictionary of {param_name:values}.
 
-        ## maybe in the future:
-        //Return a structure that describes the parameters that are varied across each
-        //axis of the sequence.
+#         ## maybe in the future:
+#         //Return a structure that describes the parameters that are varied across each
+#         //axis of the sequence.
 
-        //For example, a two-dimensional sequence might return the following:
-        //
-        //    [
-        //        [param1, param2],   # two parameters that vary across the first sequence axis
-        //        [],  # no parameters vary across the second axis (just repetitions)
-        //        [param3],  # one parameter that varies across all recordings, regardless of its position along any axis
-        //    ]
+#         //For example, a two-dimensional sequence might return the following:
+#         //
+#         //    [
+#         //        [param1, param2],   # two parameters that vary across the first sequence axis
+#         //        [],  # no parameters vary across the second axis (just repetitions)
+#         //        [param3],  # one parameter that varies across all recordings, regardless of its position along any axis
+#         //    ]
 
-        //Each parameter must be a key under 'sequence_params' in the meta data for a single syncrecording.
-        """
-        return self._meta.get('sequence_params')
+#         //Each parameter must be a key under 'sequence_params' in the meta data for a single syncrecording.
+#         """
+#         return self._meta.get('sequence_params')
 
-    # @property
-    # def parent(self):
-    #     """None
+#     # @property
+#     # def parent(self):
+#     #     """None
         
-    #     This is a convenience property used for traversing the object hierarchy.
-    #     """
-    #     return None
-    @property
-    def contents(self):
-        return self._sync_recs
+#     #     This is a convenience property used for traversing the object hierarchy.
+#     #     """
+#     #     return None
+#     @property
+#     def contents(self):
+#         return self._sync_recs
     
-    @property
-    def children(self):
-        """Alias for self.contents
+#     @property
+#     def children(self):
+#         """Alias for self.contents
         
-        This is a convenience property used for traversing the object hierarchy.
-        """
-        return self.contents
+#         This is a convenience property used for traversing the object hierarchy.
+#         """
+#         return self.contents
 
 
 class SyncRecording(Container):
