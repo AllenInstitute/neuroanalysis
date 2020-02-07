@@ -2,7 +2,8 @@ from datetime import datetime
 from neuroanalysis.data.loaders.loaders import DatasetLoader
 from acq4.util import DataManager
 from acq4.analysis.dataModels import PatchEPhys
-from neuroanalysis.data.dataset import Recording, RecordingSequence, SyncRecording, TSeries, PatchClampRecording
+from neuroanalysis.data.dataset import Recording, SyncRecording, TSeries, PatchClampRecording
+import neuroanalysis.stimuli as stimuli
 
 class Acq4DatasetLoader(DatasetLoader):
 
@@ -30,16 +31,16 @@ class Acq4DatasetLoader(DatasetLoader):
         for seq in self.dh.subDirs():
             if self.dh[seq].info().get('dirType') == 'ProtocolSequence':
                 params = self.dh[seq].info()['sequenceParams']   
-                sequence = RecordingSequence(parent=dataset, name=seq, meta={'sequence_params':params}, loader=self) 
+                #sequence = RecordingSequence(parent=dataset, name=seq, meta={'sequence_params':params}, loader=self) 
                 for sd in self.dh[seq].subDirs():
                     sdh = self.dh[seq][sd]
                     meta = {'sequence_params':{}}
                     for k in params.keys():
                         meta['sequence_params'][k] = params[k][sdh.info().get(k)]
                     srec = SyncRecording(parent=dataset, key=(seq,sd), meta=meta, loader=self)
-                    sequence.add_sync_rec(srec)
+                    #sequence.add_sync_rec(srec)
                     sync_recs.append(srec)
-                sequences.append(sequence)
+                #sequences.append(sequence)
             elif self.dh[seq].info().get('dirType') == 'Protocol':
                 srec = SyncRecording(parent=dataset, key=(seq), loader=self)
                 sync_recs.append(srec)
