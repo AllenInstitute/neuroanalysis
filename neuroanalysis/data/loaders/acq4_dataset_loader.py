@@ -185,7 +185,7 @@ class Acq4DatasetLoader(DatasetLoader):
 
     def load_test_pulse(self, recording):
         """Return a PatchClampTestPulse."""
-        raise NotImplementedError("Must be implemented in subclass.")
+        raise NotImplementedError("Don't know how to programatically determine what is a test pulse in acq4.")
 
     def find_nearest_test_pulse(self, recording):
-        raise NotImplementedError("Must be implemented in subclass.")
+        raise NotImplementedError("Don't know how to programatically determine what is a test pulse in acq4.")
