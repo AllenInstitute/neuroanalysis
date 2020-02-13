@@ -273,7 +273,7 @@ def fit_psp(data, search_window, clamp_mode, sign=0, exp_baseline=True, baseline
         
     # initial condition, lower boundary, upper boundary
     base_params = {
-        'yoffset': (init_params.get('yoffset', data_mean), -exp_amp_max, exp_amp_max),
+        'yoffset': (init_params.get('yoffset', baseline_mode), -exp_amp_max, exp_amp_max),
         'rise_time': (rise_time_init, rise_time_init/10., rise_time_init*10.),
         'decay_tau': (decay_tau_init, decay_tau_init/10., decay_tau_init*10.),
         'rise_power': (2, 'fixed'),
