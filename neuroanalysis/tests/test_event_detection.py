@@ -69,3 +69,28 @@ def check_events(a, b):
     for k in a.dtype.names:
         assert np.allclose(a[k], b[k])
         
+
+def test_exp_deconv_psp_params():
+    from neuroanalysis.event_detection import exp_deconvolve, exp_deconv_psp_params
+    from neuroanalysis.data import TSeries
+    from neuroanalysis.fitting import Psp
+
+    x = np.linspace(0, 0.02, 10000)
+    amp = 1
+    rise_time = 4e-3
+    decay_tau = 10e-3
+    rise_power = 2
+
+    # Make a PSP waveform
+    psp = Psp()
+    y = psp.eval(x=x, xoffset=0, yoffset=0, amp=amp, rise_time=rise_time, decay_tau=decay_tau, rise_power=rise_power)
+
+    # exponential deconvolution
+    y_ts = TSeries(y, time_values=x)
+    y_deconv = exp_deconvolve(y_ts, decay_tau).data
+
+    # show that we can get approximately the same result using exp_deconv_psp_params
+    d_amp, d_rise_time, d_rise_power, d_decay_tau = exp_deconv_psp_params(amp, rise_time, rise_power, decay_tau)
+    y2 = psp.eval(x=x, xoffset=0, yoffset=0, amp=d_amp, rise_time=d_rise_time, decay_tau=d_decay_tau, rise_power=d_rise_power)
+
+    assert np.allclose(y_deconv, y2[1:], atol=0.02)
