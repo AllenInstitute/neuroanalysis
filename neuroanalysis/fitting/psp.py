@@ -296,7 +296,7 @@ def fit_psp(data, search_window, clamp_mode, sign=0, exp_baseline=True, baseline
     decay_tau_bounds = decay_tau_bounds or (decay_tau_init/10., decay_tau_init*10.)
     rise_time_bounds = rise_time_bounds or (rise_time_init/10., rise_time_init*10.)
     base_params = {
-        'yoffset': (init_params.get('yoffset', data_mean), -exp_amp_max, exp_amp_max),
+        'yoffset': (init_params.get('yoffset', baseline_mode), -exp_amp_max, exp_amp_max),
         'rise_time': (rise_time_init,) + rise_time_bounds,
         'decay_tau': (decay_tau_init,) + decay_tau_bounds,
         'rise_power': (2, 'fixed'),
