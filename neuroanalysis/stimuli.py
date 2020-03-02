@@ -398,13 +398,13 @@ def find_square_pulses(trace, baseline=None):
             pulses[-1].pulse_number = i
     return pulses
 
-def find_noisy_square_pulses(trace, baseline=None, amp_threshold=None, std_threshold=10.0, min_duration=0):
+def find_noisy_square_pulses(trace, baseline=None, std_threshold=5.0, min_duration=0, min_amplitude=0):
     """Return a list of SquarePulse instances describing square pulses found
     in the given trace.
     
     A pulse is defined as any contiguous region of the stimulus waveform
     that has a value outside the amp_threshold or std_threshold from the 
-    baseline. If no baseline is specified, then the first 50 samples in the 
+    baseline. If no baseline is specified, then the first 200 samples in the 
     stimulus are used.
     
     Parameters
@@ -414,46 +414,49 @@ def find_noisy_square_pulses(trace, baseline=None, amp_threshold=None, std_thres
         see `find_square_pulse`.
     baseline : numpy.array | None
         Specify an array to use as the baseline (a region considered to be 
-        "no pulse"). If no baseline is specified, then the first 50 samples of
+        "no pulse"). If no baseline is specified, then the first 200 samples of
         *trace* are used.
-    amp_threshold: float | None
-        Amplitude change (from baseline) necessary to find a pulse (in same units as trace). If no 
-        amp_threshold is specified, std_threshold will be used instead.
     std_threshold: float | 3.0
         How many stdev's the pulse must be from the baseline to be detected. 
     min_duration: float | 0
         If specified, the minimum duration of a pulse (in seconds). Pulses shorter
         than min_duration will be discarded.
+    min_amplitude: float | 0
+        If specified, the minimum amplitude of a pulse (absolute value). Pulses 
+        with absolute value amplitudes smaller than min_amplitude will be discarded.
     """
     if not isinstance(trace, TSeries):
         raise TypeError("argument must be TSeries instance")
 
     if baseline is None:
-        baseline = trace.data[:50]
+        baseline = trace.data[:200]
 
-    if amp_threshold is None:
-        threshold = baseline.std()*std_threshold
-    else:
-        threshold = amp_threshold
+    threshold = baseline.std()*std_threshold
 
     sdiff = np.diff(trace.data - baseline.mean())
-    changes = np.argwhere(abs(sdiff) > threshold)[:, 0] + 1
+    changes = np.argwhere(abs(sdiff) > threshold)[:, 0]
+
+    ### sometimes square pulses aren't quite square - only count the diff if the index before it is below threshold
+    real_changes= []
+    for c in changes:
+        if (abs(sdiff[c-1]) < threshold) and (abs(sdiff[c]) > threshold):
+            real_changes.append(c+1) ## add one to get the first index at the new value (the start of the pulse, rather than the last point of baseline)
+    changes = real_changes
 
     pulses = []
     stop = 0
     for i, start in enumerate(changes):
-        if len(pulses) > 0 and stop > changes[i]:
+        if len(pulses) > 0 and stop >= start: ## this is the end of a pulse
             continue
-        amp = trace.data[start] - baseline.mean()
-        if abs(amp) > threshold: ## should only be true at the start of pulses
-            stop_list = [c for c in changes[i+1:] if trace.data[c]<threshold] ## get next change where value is below threshold -- allow square pulses to be not quite square
-            stop = stop_list[0] if (len(stop_list) > 0) else len(trace)
+        #amp = trace.data[start] - baseline.mean()
+        #if abs(amp) > threshold: ## should only be true at the start of pulses
+        else:
+            stop = changes[i+1] if (len(changes) > i+1) else len(trace)
             t_start = trace.time_at(start)
             duration = (stop - start) * trace.dt
             amplitude = trace.data[start:stop].mean() - baseline.mean()
-            if duration > min_duration:
+            if duration > min_duration and abs(amplitude) > min_amplitude:
                 pulses.append(SquarePulse(start_time=t_start, duration=duration, amplitude=amplitude, units=trace.units))
-                pulses[-1].pulse_number = i
 
     return pulses
 
