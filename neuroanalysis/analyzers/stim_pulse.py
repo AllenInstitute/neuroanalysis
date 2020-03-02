@@ -90,7 +90,11 @@ class PWMStimPulseAnalyzer(GenericStimPulseAnalyzer):
 
         if self._pulses.get(channel) is None:
             trace = self.rec[channel]
-            all_pulses = find_square_pulses(trace)
+
+            if trace.data[:10].std() > 0:
+                all_pulses = find_noisy_square_pulses(trace)
+            else:
+                all_pulses = find_square_pulses(trace)
 
             ## figure out if there is pwm happening
             pwm = False
