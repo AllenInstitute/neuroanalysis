@@ -124,7 +124,7 @@ class Dataset(Container):
 
     """
 
-    def __init__(self, data=None, meta=None, loader=None, sequences=None, name=None):
+    def __init__(self, data=None, meta=None, loader=None, name=None):
         Container.__init__(self, loader=loader)
         self._data = data
         self._name = name
