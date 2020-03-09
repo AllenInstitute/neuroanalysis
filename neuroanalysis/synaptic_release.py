@@ -253,7 +253,7 @@ class ReleaseModel(object):
             self.data_y.extend(datay)
             #self.data_e.extend(dataz)
             lengths.append(len(datax))
-        print self.Dynamics
+        print(self.Dynamics)
        
 
         params=lmfit.Parameters()
@@ -320,14 +320,14 @@ class ReleaseModel(object):
         for pm in self.order:
             #print 'pm0',pm
             if pm in self.Sel_gatings:
-                print 'variable pm',pm
+                print('variable pm',pm)
                 self.freeparam=self.freeparam+1
                 fitmodel.set_param_hint(pm,vary=True,value=self.dict_params[pm],min=self.dict_bounds[pm][0],max=self.dict_bounds[pm][1])
             else:
-                print 'fixed',pm
+                print('fixed',pm)
                 fitmodel.set_param_hint(pm,vary=False,value=self.dict_params[pm],min=self.dict_bounds[pm][0],max=self.dict_bounds[pm][1])
         pars=fitmodel.make_params()
-        print pars
+        print(pars)
         result = fitmodel.fit(numpy.array(self.data_y),spikes=numpy.array(self.data_x),length_array=lengths,dynamics=dynamics_vec,ode_variables=ode_variables_vec)
         print(result.fit_report())
         #ci=lmfit.conf_interval(fitmodel,result)
