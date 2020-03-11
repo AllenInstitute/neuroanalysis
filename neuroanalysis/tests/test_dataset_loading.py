@@ -1,8 +1,10 @@
+import os
+import neuroanalysis
 from neuroanalysis.data.loaders.mies_dataset_loader import MiesNwbLoader
 from neuroanalysis.data.dataset import Dataset
 from optoanalysis.analyzers import OptoBaselineAnalyzer
 
-opto_file = "/Users/meganbkratz/Code/ai/example_data/data/2019-06-13_000/slice_000/site_000/2019_06_13_exp1_TH-compressed.nwb"
+opto_file = os.path.join(os.path.dirname(neuroanalysis.__file__), '..', 'test_data', 'nwbs', '2019_06_13_exp1_TH-compressed.nwb')
 
 def test_opto_dataset_loading():
 
