@@ -10,12 +10,18 @@ class GenericStimPulseAnalyzer(Analyzer):
         self.rec = rec
         self._pulses = {}
 
+    def _check_channel(self, channel):
+        if channel not in self.rec.channels:
+            if channel is None:
+                raise ValueError("Please specify which channel to analyze. Options are: %s" % self.rec.channels)
+            else:
+                raise ValueError("Recording %s does not contain specified channel (%s). Options are: %s" % (self.rec, channel, self.rec.channels))
+
     def pulses(self, channel=None):
         """Return a list of (start_time, stop_time, amp) tuples describing square pulses
         in the specified channel.
         """
-        if channel is None:
-            raise Exception("Please specify which channel to analyze pulses from. Options are: %s" % self.rec.channels)
+        self._check_channel(channel)
 
         if self._pulses.get(channel) is None:
             trace = self.rec[channel]
@@ -33,8 +39,7 @@ class GenericStimPulseAnalyzer(Analyzer):
     def stim_params(self, channel=None):
         """Return induction frequency and recovery delay.
         """
-        if channel is None:
-            raise Exception("Please specify which channel to analyze stim params from. Options are: %s" % self.rec.channels)
+        self._check_channel(channel)
 
         pulses = [p[0] for p in self.pulses(channel=channel) if p[2] > 0]
         if len(pulses) < 2:
@@ -85,8 +90,7 @@ class PWMStimPulseAnalyzer(GenericStimPulseAnalyzer):
                 The channel to analyze pulses from. 
             """ % str(self.pwm_min_frequency)
 
-        if channel is None:
-            raise Exception("Please specify which channel to analyze pulses from. Options are: %s" % self.rec.channels)
+        self._check_channel(channel)
 
         if self._pulses.get(channel) is None:
             trace = self.rec[channel]
@@ -155,8 +159,7 @@ class PWMStimPulseAnalyzer(GenericStimPulseAnalyzer):
     def pwm_params(self, channel=None, pulse_n=None):
         """Return frequency and duration of pulse width modulation pulses for the given channel and pulse number.
         """
-        if channel is None:
-            raise Exception("Please specify which channel to return pulse width modulation params from. Options are: %s" % self.rec.channels)
+        self._check_channel(channel)
 
         if self._pulses.get(channel) is None: ## we've not analyzed this channel yet, do it now
             self.pulses(channel=channel)
