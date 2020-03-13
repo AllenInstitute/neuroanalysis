@@ -41,7 +41,7 @@ class GenericStimPulseAnalyzer(Analyzer):
         """
         self._check_channel(channel)
 
-        pulses = [p[0] for p in self.pulses(channel=channel) if p[2] > 0]
+        pulses = [p[0] for p in self.pulses(channel=channel) if abs(p[2]) > 0]
         if len(pulses) < 2:
             return None, None
         ind_freq = np.round(1.0 / (pulses[1] - pulses[0]))
