@@ -256,6 +256,8 @@ def fit_psp(data, search_window, clamp_mode, sign=0, exp_baseline=True, baseline
     # take some measurements to help constrain fit
     data_min = data.data.min()
     data_max = data.data.max()
+    if data_max == data_min:
+        return None
     data_mean = data.mean()
     
     baseline_mode = float_mode(data.time_slice(None, search_window[0]).data)
