@@ -1,6 +1,8 @@
+import os
 from collections import OrderedDict
 import numpy as np
 import neuroanalysis.stimuli as stimuli
+from neuroanalysis.data.dataset import TSeries
 
 
 def test_stimulus():
@@ -292,3 +294,50 @@ def test_chirp():
     # test analytically determined frequencies
     freqs = f0 ** np.linspace(1, np.log(f1) / np.log(f0), len(t)+1)[:-1]
     assert np.allclose(freqs, stim.frequency_at(t))
+
+def test_find_noisy_square_pulses():
+    dt = 0.0002
+    np.random.seed(54321)
+
+    data = np.random.normal(0.002, 0.0015, 10000)
+    ## add a small 60 Hz sine wave
+    data += 0.004 * np.sin(np.arange(10000) * 2.0 * np.pi / (1/60. * 1/dt))
+
+    ## create a pulse an make the edges a little fuzzy
+    amp1 = 1
+    data[2001:2200] += amp1
+    data[2000] += (0.7 * amp1)
+    data[2200] += (0.2 * amp1)
+
+    ## create a second smaller pulse
+    amp2 = 0.3
+    data[5000:5500] += amp2
+
+    tseries = TSeries(data=data, dt=dt, units='V')
+
+    pulses = stimuli.find_noisy_square_pulses(tseries)
+
+    ## make sure we found correct number and that they are SquarePulses
+    assert len(pulses) == 2
+    assert isinstance(pulses[0], stimuli.SquarePulse)
+
+
+    ## check parameters
+    assert pulses[0].start_time == 0.4
+    assert np.isclose(pulses[0].amplitude, amp1, 0.001, 0.001)
+    assert pulses[0].duration == 0.04
+    assert pulses[1].start_time == 1
+    assert np.isclose(pulses[1].amplitude, amp2, 0.001, 0.001)
+    assert pulses[1].duration == 0.1
+
+
+
+
+
+
+
+
+
+
+
+

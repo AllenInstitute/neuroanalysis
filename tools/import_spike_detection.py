@@ -15,7 +15,9 @@ from neuroanalysis.spike_detection import detect_evoked_spikes, SpikeDetectTestC
 from neuroanalysis.ui.spike_detection import SpikeDetectUI
 from neuroanalysis.data import TSeries, TSeriesList, PatchClampRecording
 from multipatch_analysis.database import default_db as db
-from multipatch_analysis.data import Analyzer, PulseStimAnalyzer, MultiPatchProbe
+from multipatch_analysis.data import MultiPatchProbe
+from neuroanalysis.analyzers.analyzer import Analyzer
+from neuroanalysis.analyzers.stim_pulse import PatchClampStimPulseAnalyzer
 
 import pyqtgraph as pg
 pg.dbg()  # for inspecting exception stack
@@ -54,7 +56,7 @@ def iter_pulses():
         print("sweep: %d  channel: %d" % (sweep.key, channel))
 
         # Get chunks for each stim pulse        
-        pulse_stim = PulseStimAnalyzer.get(pre_rec)
+        pulse_stim = PatchClampStimPulseAnalyzer.get(pre_rec)
         chunks = pulse_stim.pulse_chunks()
         for chunk in chunks:
             yield (expt_id, cell_id, sweep, channel, chunk)
