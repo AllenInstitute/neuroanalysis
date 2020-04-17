@@ -109,6 +109,9 @@ def threshold_events(trace, threshold, adjust_times=True, baseline=0.0, omit_end
     ## find all threshold crossings
     hits = []
     for signed_threshold in (-threshold, threshold):
+        if len(data1) == 0:
+            continue
+        
         if signed_threshold < 0:
             mask = data1 < signed_threshold
         else:

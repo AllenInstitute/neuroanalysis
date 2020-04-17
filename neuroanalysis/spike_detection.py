@@ -135,36 +135,37 @@ def detect_ic_evoked_spikes(trace, pulse_edges, dv2_threshold=40e3, mse_threshol
         dv_after_pulse = trace.time_slice(pulse_edges[1] + 100e-6, None).diff()
         dv_after_pulse = bessel_filter(dv_after_pulse, 15e3, bidir=True)
 
-        # create a vector to fit
-        ttofit = dv_after_pulse.time_values  # setting time to start at zero, note: +1 because time trace of derivative needs to be one shorter
-        ttofit = ttofit - ttofit[0]
+        if dv_after_pulse.duration > 0.5e-3:
+            # create a vector to fit
+            ttofit = dv_after_pulse.time_values  # setting time to start at zero, note: +1 because time trace of derivative needs to be one shorter
+            ttofit = ttofit - ttofit[0]
 
-        # do fit and see if it matches
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")    
-            popt, pcov = curve_fit(rc_decay, ttofit, dv_after_pulse.data, maxfev=10000)
-        fit = rc_decay(ttofit, *popt)
-        if ui is not None:
-            ui.plt2.plot(dv_after_pulse.time_values, dv_after_pulse.data)
-            ui.plt2.plot(dv_after_pulse.time_values, fit, pen='b')
+            # do fit and see if it matches
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")    
+                popt, pcov = curve_fit(rc_decay, ttofit, dv_after_pulse.data, maxfev=10000)
+            fit = rc_decay(ttofit, *popt)
+            if ui is not None:
+                ui.plt2.plot(dv_after_pulse.time_values, dv_after_pulse.data)
+                ui.plt2.plot(dv_after_pulse.time_values, fit, pen='b')
 
-        diff = dv_after_pulse - fit
-        mse = (diff.data**2).mean()  # mean squared error
-        if mse > mse_threshold:
-            search_window = 2e-3
-            max_slope_time, is_edge = max_time(diff.time_slice(pulse_edges[1], pulse_edges[1] + search_window))
-            if is_edge != 0:
-                max_slope_time = None
-            peak_time, is_edge = max_time(trace.time_slice(max_slope_time or pulse_edges[1] + 100e-6, pulse_edges[1] + search_window))
-            if is_edge != 0:
-                peak_time = None
-            spikes.append({
-                'onset_time': None,
-                'max_slope_time': max_slope_time,
-                'peak_time': peak_time,
-                'peak_value': None if peak_time is None else trace.value_at(peak_time),
-                'max_slope': None if max_slope_time is None else dv_after_pulse.value_at(max_slope_time),
-            })
+            diff = dv_after_pulse - fit
+            mse = (diff.data**2).mean()  # mean squared error
+            if mse > mse_threshold:
+                search_window = 2e-3
+                max_slope_time, is_edge = max_time(diff.time_slice(pulse_edges[1], pulse_edges[1] + search_window))
+                if is_edge != 0:
+                    max_slope_time = None
+                peak_time, is_edge = max_time(trace.time_slice(max_slope_time or pulse_edges[1] + 100e-6, pulse_edges[1] + search_window))
+                if is_edge != 0:
+                    peak_time = None
+                spikes.append({
+                    'onset_time': None,
+                    'max_slope_time': max_slope_time,
+                    'peak_time': peak_time,
+                    'peak_value': None if peak_time is None else trace.value_at(peak_time),
+                    'max_slope': None if max_slope_time is None else dv_after_pulse.value_at(max_slope_time),
+                })
 
     for spike in spikes:
         assert 'max_slope_time' in spike
