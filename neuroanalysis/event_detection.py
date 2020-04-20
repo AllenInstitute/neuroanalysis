@@ -1,6 +1,7 @@
 from __future__ import division
 import numpy as np
 from .data import TSeries
+from .fitting.psp import Psp
 
 
 def zero_crossing_events(data, min_length=3, min_peak=0.0, min_sum=0.0, noise_threshold=None):
@@ -109,6 +110,9 @@ def threshold_events(trace, threshold, adjust_times=True, baseline=0.0, omit_end
     ## find all threshold crossings
     hits = []
     for signed_threshold in (-threshold, threshold):
+        if len(data1) == 0:
+            continue
+        
         if signed_threshold < 0:
             mask = data1 < signed_threshold
         else:
@@ -300,8 +304,8 @@ def clements_bekkers(data, template):
     See Clements & Bekkers, Biophysical Journal, 73: 220-229, 1997.
     """
     # Strip out meta-data for faster computation
-    D = data.view(ndarray)
-    T = template.view(ndarray)
+    D = data.view(np.ndarray)
+    T = template.view(np.ndarray)
     
     # Prepare a bunch of arrays we'll need later
     N = len(T)
@@ -309,7 +313,7 @@ def clements_bekkers(data, template):
     sumT2 = (T**2).sum()
     sumD = rolling_sum(D, N)
     sumD2 = rolling_sum(D**2, N)
-    sumTD = correlate(D, T, mode='valid')
+    sumTD = np.correlate(D, T, mode='valid')
     
     # compute scale factor, offset at each location:
     scale = (sumTD - sumT * sumD / N) / (sumT2 - sumT**2 / N)
@@ -319,7 +323,7 @@ def clements_bekkers(data, template):
     SSE = sumD2 + scale**2 * sumT2 + N * offset**2 - 2 * (scale*sumTD + offset*sumD - scale*offset*sumT)
     
     # finally, compute error and detection criterion
-    error = sqrt(SSE / (N-1))
+    error = np.sqrt(SSE / (N-1))
     DC = scale / error
     return DC, scale, offset
 
@@ -332,7 +336,7 @@ def exp_deconvolve(trace, tau):
     """
     dt = trace.dt
     arr = trace.data
-    deconv = arr[:-1] + (tau / dt) * (arr[1:] - arr[:-1])
+    deconv = arr[:-1] + (tau / dt) * np.diff(arr)
     if trace.has_time_values:
         # data is one sample shorter; clip time values to match.
         return trace.copy(data=deconv, time_values=trace.time_values[:-1])
@@ -348,3 +352,35 @@ def exp_reconvolve(trace, tau):
     for i in range(1, len(d)):
         d[i] = dtti * d[i-1] + dtt * trace.data[i-1]
     return trace.copy(data=d)
+
+
+def exp_deconv_psp_params(amp, rise_time, rise_power, decay_tau):
+    """Analytical solution to exponential deconvolution on a PSP shape.
+    
+    For parameter documentation, see fitting.psp.Psp.
+    
+    The *decay_tau* parameter is used both to describe the psp shape and as the deconvolution
+    time constant. Under this constraint, the solution has exactly the same form as the original PSP
+    but with different parameters.
+    
+    Returns
+    -------
+    deconv_amp : float
+    deconv_rise_time : float
+    deconv_rise_power : float
+    deconv_decay_tau : float
+    """
+    # sympy helped us out a bit here:
+    # import sympy
+    # t, tr, td, rp, tdec = sympy.symbols('t tr td rp tdec')
+    # psp = (1 - sympy.exp(-t/tr))**rp * sympy.exp(-t/td)
+    # dec = sympy.simplify(psp + tdec * sympy.diff(psp, t))
+    
+    rise_tau = Psp._compute_rise_tau(rise_time, rise_power, decay_tau)
+    deconv_decay_tau = 1 / (1 / rise_tau + 1 / decay_tau)
+    deconv_rise_power = rise_power - 1
+    deconv_rise_time = Psp._compute_rise_time(rise_tau, deconv_rise_power, deconv_decay_tau)
+    old_max = Psp._psp_inner(rise_time, rise_tau, rise_power, decay_tau)
+    new_max = Psp._psp_inner(deconv_rise_time, rise_tau, deconv_rise_power, deconv_decay_tau)
+    deconv_amp = amp * new_max / old_max * rise_power * decay_tau / rise_tau
+    return deconv_amp, deconv_rise_time, deconv_rise_power, deconv_decay_tau

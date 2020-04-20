@@ -187,12 +187,7 @@ class MiesNwb(Dataset):
             sweep_ids = sorted(list(self._timeseries.keys()))
             self._sweeps = []
             for sweep_id in sweep_ids:
-                try:
-                    srec = self.create_sync_recording(int(sweep_id))
-                except Exception:
-                    print("Skipping sweep %s:" % sweep_id)
-                    sys.excepthook(*sys.exc_info())
-                    continue
+                srec = self.create_sync_recording(int(sweep_id))
                 self._sweeps.append(srec)
         return self._sweeps
     

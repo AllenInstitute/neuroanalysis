@@ -1,7 +1,8 @@
 from __future__ import print_function, division
 
-import sys, json, warnings
+import sys, json, warnings, functools
 import numpy as np
+import numba
 import scipy.optimize
 from ..data import Trace
 from ..util.data_test import DataTestCase
@@ -37,41 +38,52 @@ class Psp(FitModel):
     are re-expressed to give more direct control over the rise time and peak value.
     This provides a flatter error surface to fit against, avoiding some of the
     tradeoff between parameters that Exp2 suffers from.
+    
+    The results of this model are only valid when ``rise_time < decay_tau * rise_power``.
     """
 
     def __init__(self):
         FitModel.__init__(self, self.psp_func, independent_vars=['x'])
 
     @staticmethod
-    def _psp_inner(x, rise, decay, power):
-        return (1.0 - np.exp(-x / rise))**power * np.exp(-x / decay)
+    def _psp_inner(x, rise_tau, rise_power, decay_tau):
+        return (1.0 - np.exp(-x / rise_tau))**rise_power * np.exp(-x / decay_tau)
 
     @staticmethod
-    def _psp_max_time(rise, decay, rise_power):
+    def _psp_max_time(rise_tau, rise_power, decay_tau):
         """Return the time from start to peak for a psp with given parameters."""
-        return rise * np.log(1 + (decay * rise_power / rise))
+        return rise_tau * np.log(1 + (decay_tau * rise_power / rise_tau))
 
     @staticmethod
     def psp_func(x, xoffset, yoffset, rise_time, decay_tau, amp, rise_power):
         """Function approximating a PSP shape. 
         """
         rise_tau = Psp._compute_rise_tau(rise_time, rise_power, decay_tau)
-        max_val = Psp._psp_inner(rise_time, rise_tau, decay_tau, rise_power)
+        max_val = Psp._psp_inner(rise_time, rise_tau, rise_power, decay_tau)
         
         xoff = x - xoffset
         output = np.empty(xoff.shape, xoff.dtype)
         output[:] = yoffset
         mask = xoff >= 0
-        output[mask] = yoffset + (amp / max_val) * Psp._psp_inner(xoff[mask], rise_tau, decay_tau, rise_power)
+        output[mask] = yoffset + (amp / max_val) * Psp._psp_inner(xoff[mask], rise_tau, rise_power, decay_tau)
         
         if not np.all(np.isfinite(output)):
             raise ValueError("Parameters are invalid: xoffset=%f, yoffset=%f, rise_tau=%f, decay_tau=%f, amp=%f, rise_power=%f, isfinite(x)=%s" % (xoffset, yoffset, rise_tau, decay_tau, amp, rise_power, np.all(np.isfinite(x))))
         return output
             
     @staticmethod
+    @functools.lru_cache(maxsize=4096)
     def _compute_rise_tau(rise_time, rise_power, decay_tau):
-        fn = lambda tr: tr * np.log(1 + (decay_tau * rise_power / tr)) - rise_time
-        return scipy.optimize.fsolve(fn, (rise_time,))[0]
+        return scipy.optimize.fsolve(Psp._rise_time_from_tau, (rise_time,), (rise_time, rise_power, decay_tau))[0]
+
+    @staticmethod
+    @numba.jit(nopython=True)
+    def _rise_time_from_tau(rise_tau, rise_time, rise_power, decay_tau):
+        return rise_tau * np.log(1 + (decay_tau * rise_power / rise_tau)) - rise_time
+
+    @staticmethod
+    def _compute_rise_time(rise_tau, rise_power, decay_tau):
+        return rise_tau * np.log((rise_power * decay_tau + rise_tau) / rise_tau)
 
 
 class StackedPsp(FitModel):
@@ -85,10 +97,13 @@ class StackedPsp(FitModel):
     
     @staticmethod
     def stacked_psp_func(x, xoffset, yoffset, rise_time, decay_tau, amp, rise_power, exp_amp, exp_tau):
+        # print('xoff {:g} yoff {:g} rise {:g} decay {:g} amp {:g} exp_amp {:g} '.format(xoffset, yoffset, rise_time, decay_tau, amp, exp_amp))
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")    
             exp = exp_amp * np.exp(-(x-xoffset) / exp_tau)
-            return exp + Psp.psp_func(x, xoffset, yoffset, rise_time, decay_tau, amp, rise_power)
+            v = exp + Psp.psp_func(x, xoffset, yoffset, rise_time, decay_tau, amp, rise_power)
+            # print("   => ", np.linalg.norm(v))
+            return v
 
 
 class PspTrain(FitModel):
@@ -156,7 +171,7 @@ class Psp2(FitModel):
         return out
 
 
-def fit_psp(data, search_window, clamp_mode, sign=0, exp_baseline=True, baseline_like_psp=False, refine=True, init_params=None, fit_kws=None, ui=None):
+def fit_psp(data, search_window, clamp_mode, sign=0, exp_baseline=True, baseline_like_psp=False, refine=True, init_params=None, decay_tau_bounds=None, rise_time_bounds=None, fit_kws=None, ui=None):
     """Fit a Trace instance to a StackedPsp model.
     
     This function is a higher-level interface to StackedPsp.fit:    
@@ -186,6 +201,10 @@ def fit_psp(data, search_window, clamp_mode, sign=0, exp_baseline=True, baseline
         If True, then fit in two stages, with the second stage searching over rise/decay.
     init_params : dict
         Initial parameter guesses
+    decay_tau_bounds : tuple | None
+        (min, max) values for decay_tau. Default bounds are the initial value for decay_tau 0.1 and 10.
+    rise_time_bounds : tuple | None
+        (min, max) values for rise_time. Default bounds are the initial value for rise_time 0.1 and 10.
     fit_kws : dict
         Extra keyword arguments to send to the minimizer
     
@@ -237,6 +256,8 @@ def fit_psp(data, search_window, clamp_mode, sign=0, exp_baseline=True, baseline
     # take some measurements to help constrain fit
     data_min = data.data.min()
     data_max = data.data.max()
+    if data_max == data_min:
+        return None
     data_mean = data.mean()
     
     baseline_mode = float_mode(data.time_slice(None, search_window[0]).data)
@@ -251,6 +272,7 @@ def fit_psp(data, search_window, clamp_mode, sign=0, exp_baseline=True, baseline
         decay_tau_init = init_params.get('decay_tau', 50e-3)
         exp_tau_init = init_params.get('exp_tau', 50e-3)
         exp_amp_max = 100e-3
+        yoffset_max = 200e-3
     elif clamp_mode == 'vc':
         amp_init = init_params.get('amp', 20e-12)
         amp_max = min(500e-12, 3 * (data_max-data_min))
@@ -258,6 +280,7 @@ def fit_psp(data, search_window, clamp_mode, sign=0, exp_baseline=True, baseline
         decay_tau_init = init_params.get('decay_tau', 4e-3)
         exp_tau_init = init_params.get('exp_tau', 4e-3)
         exp_amp_max = 10e-9
+        yoffset_max = 20e-9
     else:
         raise ValueError('clamp_mode must be "ic" or "vc"')
 
@@ -272,10 +295,12 @@ def fit_psp(data, search_window, clamp_mode, sign=0, exp_baseline=True, baseline
         raise ValueError('sign must be 1, -1, or 0')
         
     # initial condition, lower boundary, upper boundary
+    decay_tau_bounds = decay_tau_bounds or (decay_tau_init/10., decay_tau_init*10.)
+    rise_time_bounds = rise_time_bounds or (rise_time_init/10., rise_time_init*10.)
     base_params = {
         'yoffset': (init_params.get('yoffset', baseline_mode), -exp_amp_max, exp_amp_max),
-        'rise_time': (rise_time_init, rise_time_init/10., rise_time_init*10.),
-        'decay_tau': (decay_tau_init, decay_tau_init/10., decay_tau_init*10.),
+        'rise_time': (rise_time_init,) + rise_time_bounds,
+        'decay_tau': (decay_tau_init,) + decay_tau_bounds,
         'rise_power': (2, 'fixed'),
         'amp': amp,
     }
@@ -314,7 +339,9 @@ def fit_psp(data, search_window, clamp_mode, sign=0, exp_baseline=True, baseline
     prof('prep for coarse fit')
 
     # Find best coarse fit 
-    search = SearchFit(psp, [xoffset], params=base_params, x=data.time_values, data=data.data, fit_kws=fit_kws, method=method)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        search = SearchFit(psp, [xoffset], params=base_params, x=data.time_values, data=data.data, fit_kws=fit_kws, method=method)
     for i,result in enumerate(search.iter_fit()):
         pass
         # prof('  coarse fit iteration %d/%d: %s %s' % (i, len(search), result['param_index'], result['params']))
@@ -337,10 +364,10 @@ def fit_psp(data, search_window, clamp_mode, sign=0, exp_baseline=True, baseline
     xoffset = [{'xoffset': ((a+b)/2., a, b)} for a,b in zip(xoffset_chunks[:-1], xoffset_chunks[1:])]
 
     # Search amp / rise time / decay tau to avoid traps
-    rise_time_inits = base_params['rise_time'][0] * 1.2**np.arange(-1,6)
+    rise_time_inits = base_params['rise_time'][0] * 1.2**np.arange(-3,6)
     rise_time = [{'rise_time': (x,) + base_params['rise_time'][1:]} for x in rise_time_inits]
 
-    decay_tau_inits = base_params['decay_tau'][0] * 2.0**np.arange(-1,2)
+    decay_tau_inits = base_params['decay_tau'][0] * 2.0**np.arange(-3,6)
     decay_tau = [{'decay_tau': (x,) + base_params['decay_tau'][1:]} for x in decay_tau_inits]
 
     search_params = [
@@ -362,7 +389,9 @@ def fit_psp(data, search_window, clamp_mode, sign=0, exp_baseline=True, baseline
     prof("prepare for fine fit %r" % base_params)
 
     # Find best fit 
-    search = SearchFit(psp, search_params, params=base_params, x=data.time_values, data=data.data, fit_kws=fit_kws, method=method)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        search = SearchFit(psp, search_params, params=base_params, x=data.time_values, data=data.data, fit_kws=fit_kws, method=method)
     for i,result in enumerate(search.iter_fit()):
         pass
         prof('  fine fit iteration %d/%d: %s %s' % (i, len(search), result['param_index'], result['params']))
