@@ -2,13 +2,13 @@ from __future__ import print_function, division
 
 import sys, json, warnings, functools
 import numpy as np
-import numba
 import scipy.optimize
 from ..data import Trace
 from ..util.data_test import DataTestCase
 from ..baseline import float_mode
 from .fitmodel import FitModel
 from .searchfit import SearchFit
+from ..util.jit import numba_jit
 
 
 class Psp(FitModel):
@@ -77,7 +77,7 @@ class Psp(FitModel):
         return scipy.optimize.fsolve(Psp._rise_time_from_tau, (rise_time,), (rise_time, rise_power, decay_tau))[0]
 
     @staticmethod
-    @numba.jit(nopython=True)
+    @numba_jit(nopython=True)
     def _rise_time_from_tau(rise_tau, rise_time, rise_power, decay_tau):
         return rise_tau * np.log(1 + (decay_tau * rise_power / rise_tau)) - rise_time
 
