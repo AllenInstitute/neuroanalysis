@@ -151,6 +151,7 @@ class MiesNwbLoader(DatasetLoader):
                         device_id=device, 
                         sync_recording = sync_rec,
                         loader=self,
+                        start_time=start_time,
                         **meta)
                     rec['reporter']._recording = rec
 
