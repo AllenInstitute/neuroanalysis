@@ -1,6 +1,6 @@
 from __future__ import print_function, division
 
-import sys, json, warnings, functools
+import sys, json, warnings
 import numpy as np
 import scipy.optimize
 from ..data import Trace
@@ -9,6 +9,7 @@ from ..baseline import float_mode
 from .fitmodel import FitModel
 from .searchfit import SearchFit
 from ..util.jit import numba_jit
+from ..util.lru_cache import lru_cache
 
 
 class Psp(FitModel):
@@ -72,7 +73,7 @@ class Psp(FitModel):
         return output
             
     @staticmethod
-    @functools.lru_cache(maxsize=4096)
+    @lru_cache(maxsize=4096)
     def _compute_rise_tau(rise_time, rise_power, decay_tau):
         return scipy.optimize.fsolve(Psp._rise_time_from_tau, (rise_time,), (rise_time, rise_power, decay_tau))[0]
 
