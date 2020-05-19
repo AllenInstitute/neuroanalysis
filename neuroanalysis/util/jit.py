@@ -10,8 +10,8 @@ no_numba_warn = True
 use_numba = True
 
 
-def _fake_jit(**kwds):
-    return lambda fn: fn
+def _fake_jit(fn):
+    return fn
 
 
 def numba_jit(*args, **kwds):
@@ -24,5 +24,5 @@ def numba_jit(*args, **kwds):
         if use_numba and no_numba_warn:
             warnings.warn("Could not import numba; falling back to slower implementation.")
             no_numba_warn = False
-        return fake_jit
+        return _fake_jit
 
