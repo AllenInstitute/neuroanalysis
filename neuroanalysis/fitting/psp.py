@@ -172,7 +172,7 @@ class Psp2(FitModel):
         return out
 
 
-def fit_psp(data, search_window, clamp_mode, sign=0, exp_baseline=True, baseline_like_psp=False, refine=True, init_params=None, decay_tau_bounds=None, rise_time_bounds=None, fit_kws=None, ui=None):
+def fit_psp(data, search_window, clamp_mode, sign=0, exp_baseline=True, baseline_like_psp=False, refine=True, init_params=None, decay_tau_bounds=None, rise_time_bounds=None, fit_kws=None, ui=None, fine_search_spacing=0.2e-3, fine_search_window_width=1e-3):
     """Fit a Trace instance to a StackedPsp model.
     
     This function is a higher-level interface to StackedPsp.fit:    
@@ -208,6 +208,12 @@ def fit_psp(data, search_window, clamp_mode, sign=0, exp_baseline=True, baseline
         (min, max) values for rise_time. Default bounds are the initial value for rise_time 0.1 and 10.
     fit_kws : dict
         Extra keyword arguments to send to the minimizer
+    ui : ? | None
+    fine_search_spacing: float | 0.2 ms
+        How finely to divide the xoffset parameter space for the fine search, only relevant if refine=True
+    fine_search_window_width: float | 1 ms
+        Width of the window for the fine search. Window will be the xoffset result of the 
+        course search +/- fine_search_window_width. Only relevant if refine=True
     
     Returns
     -------
@@ -359,14 +365,15 @@ def fit_psp(data, search_window, clamp_mode, sign=0, exp_baseline=True, baseline
     # Round 2: fine fit
         
     # Fine search xoffset
-    fine_search_window = (max(search_window[0], fit['xoffset']-1e-3), min(search_window[1], fit['xoffset']+1e-3))
-    n_xoffset_chunks = max(1, int((fine_search_window[1] - fine_search_window[0]) / .2e-3))
+    fine_search_window = (max(search_window[0], fit['xoffset']-fine_search_window_width), min(search_window[1], fit['xoffset']+fine_search_window_width))
+    n_xoffset_chunks = max(1, int((fine_search_window[1] - fine_search_window[0]) / fine_search_spacing))
     xoffset_chunks = np.linspace(fine_search_window[0], fine_search_window[1], n_xoffset_chunks + 1)
     xoffset = [{'xoffset': ((a+b)/2., a, b)} for a,b in zip(xoffset_chunks[:-1], xoffset_chunks[1:])]
 
     # Search amp / rise time / decay tau to avoid traps
     rise_time_inits = base_params['rise_time'][0] * 1.2**np.arange(-3,6)
     rise_time = [{'rise_time': (x,) + base_params['rise_time'][1:]} for x in rise_time_inits]
+    #print('      rise_times:', rise_time)
 
     decay_tau_inits = base_params['decay_tau'][0] * 2.0**np.arange(-3,6)
     decay_tau = [{'decay_tau': (x,) + base_params['decay_tau'][1:]} for x in decay_tau_inits]
@@ -388,6 +395,7 @@ def fit_psp(data, search_window, clamp_mode, sign=0, exp_baseline=True, baseline
         search_params.append(amp)
 
     prof("prepare for fine fit %r" % base_params)
+    #print("      total search params:", ['%s:%i'%(list(p[0].keys())[0], len(p)) for p in search_params])
 
     # Find best fit 
     with warnings.catch_warnings():
