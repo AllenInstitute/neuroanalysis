@@ -1,6 +1,8 @@
 import numpy as np
 from neuroanalysis.analyzers.analyzer import Analyzer
 from neuroanalysis.stimuli import find_square_pulses, find_noisy_square_pulses, SquarePulse
+from neuroanalysis.spike_detection import detect_evoked_spikes
+
 
 class GenericStimPulseAnalyzer(Analyzer):
     """For analyzing noise-free or noisy square-pulse stimulations."""
@@ -48,6 +50,7 @@ class GenericStimPulseAnalyzer(Analyzer):
         rec_delay = np.round(np.diff(pulses).max(), 3)
         
         return ind_freq, rec_delay
+
 
 class PWMStimPulseAnalyzer(GenericStimPulseAnalyzer):
     """For analyzing noise-free digital channels where pulse width modulation may have

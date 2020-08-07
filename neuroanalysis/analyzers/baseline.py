@@ -34,21 +34,28 @@ class BaselineDistributor(Analyzer):
     def __init__(self, rec):
         self._attach(rec)
         self.rec = rec
-        self.baselines = rec.baseline_regions
-        self.ptr = 0
+        self.baselines = [list(r) for r in rec.baseline_regions]
 
     def get_baseline_chunk(self, duration=20e-3):
         """Return the (start, stop) indices of a chunk of unused baseline with the
         given duration.
         """
+        for i, baseline_rgn in enumerate(self.baselines):
+            rgn_start, rgn_stop = baseline_rgn
+            if rgn_stop - rgn_start < duration:
+                continue
+            chunk_stop = rgn_start + duration
+            baseline_rgn[0] = chunk_stop
+            return rgn_start, chunk_stop
+        
+        # coundn't find any baseline data of the requested length
+        return None
+
+    def baseline_chunks(self, duration=20e-3):
+        """Iterator yielding (start, stop) indices of baseline chunks.
+        """
         while True:
-            if len(self.baselines) == 0:
-                return None
-            start, stop = self.baselines[0]
-            chunk_start = max(start, self.ptr)
-            chunk_stop = chunk_start + duration
-            if chunk_stop <= stop:
-                self.ptr = chunk_stop
-                return chunk_start, chunk_stop
-            else:
-                self.baselines.pop(0)
+            chunk = self.get_baseline_chunk(duration)
+            if chunk is None:
+                break
+            yield chunk
