@@ -788,7 +788,8 @@ class MiesStimulus(stimuli.Stimulus):
                         item = None
                 except Exception as exc:
                     print("Warning: error reading stimulus epoch %d in %s sweep %s: %s" % (epoch_n, rec._nwb, rec._trace_id, str(exc)))
-            
+                    item = None
+                    
                 t += duration
                 if item is not None:
                     self.append_item(item)
