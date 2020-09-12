@@ -38,19 +38,6 @@ class GenericStimPulseAnalyzer(Analyzer):
                 self._pulses[channel].append((start, stop, p.amplitude))
         return self._pulses[channel]
 
-    def stim_params(self, channel=None):
-        """Return induction frequency and recovery delay.
-        """
-        self._check_channel(channel)
-
-        pulses = [p[0] for p in self.pulses(channel=channel) if abs(p[2]) > 0]
-        if len(pulses) < 2:
-            return None, None
-        ind_freq = np.round(1.0 / (pulses[1] - pulses[0]))
-        rec_delay = np.round(np.diff(pulses).max(), 3)
-        
-        return ind_freq, rec_delay
-
 
 class PWMStimPulseAnalyzer(GenericStimPulseAnalyzer):
     """For analyzing noise-free digital channels where pulse width modulation may have
@@ -257,15 +244,3 @@ class PatchClampStimPulseAnalyzer(GenericStimPulseAnalyzer):
                 spike_info.append({'pulse_n': chunk.meta['pulse_n'], 'pulse_start': pulse_edges[0], 'pulse_end': pulse_edges[1], 'spikes': spikes})
             self._evoked_spikes = spike_info
         return self._evoked_spikes
-
-    def stim_params(self, channel='command'):
-        """Return induction frequency and recovery delay.
-        """
-        return GenericStimPulseAnalyzer.stim_params(self, channel=channel)
-        # pulses = [p[0] for p in self.pulses() if p[2] > 0]
-        # if len(pulses) < 2:
-        #     return None, None
-        # ind_freq = np.round(1.0 / (pulses[1] - pulses[0]))
-        # rec_delay = np.round(np.diff(pulses).max(), 3)
-        
-        # return ind_freq, rec_delay
