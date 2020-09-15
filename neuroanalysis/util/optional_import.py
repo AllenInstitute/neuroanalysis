@@ -1,7 +1,7 @@
 import importlib
 
 
-def optional_import(module, fromlist=None, package=None):
+def optional_import(module, names=None, package=None):
     """Try importing a module, but if that fails, wait until the first time it is
     accessed before raising the ImportError.
 
@@ -9,9 +9,11 @@ def optional_import(module, fromlist=None, package=None):
     ----------
     module : str
         Name of module to import (or import from)
-    fromlist : list of str
-        Optional list of names to import 
-    package : str
+    names : str | list of str | None
+        Optional name or list of names to import from *module*. If string, then
+        the single imported object is returned. If list, then a list
+        of imported objects is returned.
+    package : str | None
         Optional base package from which relative *module* names are constructed.
         This argument is required if the *module* is relative (begins with `.`).
 
@@ -24,23 +26,29 @@ def optional_import(module, fromlist=None, package=None):
         array, zeros = optional_import('numpy', names=['array', 'zeros'])
 
         # from ..mypackage import myname
-        myname = optional_import('..mypackage', names=['myname'], package=__name__)
+        myname = optional_import('..mypackage', names='myname', package=__name__)
 
     """
+    returnlist = isinstance(names, (list, tuple))
     try:
         mod = importlib.import_module(module, package=package)
-        if fromlist is not None:
+        if names is not None:
             ret = []
-            for name in fromlist:
+            for name in names:
                 if hasattr(mod, name):
                     ret.append(getattr(mod, name))
                 else:
                     ret.append(OptionalImportError(ImportError("cannot import name '%s' from '%s' (%s)" % (name, module, mod.__file__))))
-            return ret
+            if returnlist:
+                return ret
+            else:
+                return ret[0]
     except ImportError as exc:
         mod = OptionalImportError(exc)
-        if fromlist is not None:
-            return [mod] * len(fromlist)
+        if returnlist:
+            return [mod] * len(names)
+        else:
+            return mod
 
 
 class OptionalImportError(object):
