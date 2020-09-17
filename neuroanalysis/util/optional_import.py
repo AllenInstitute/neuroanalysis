@@ -30,6 +30,9 @@ def optional_import(module, names=None, package=None):
 
     """
     returnlist = isinstance(names, (list, tuple))
+    if not returnlist:
+        names = [names]
+    
     try:
         mod = importlib.import_module(module, package=package)
         if names is not None:
