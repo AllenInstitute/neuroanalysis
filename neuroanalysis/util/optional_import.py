@@ -30,22 +30,21 @@ def optional_import(module, names=None, package=None):
 
     """
     returnlist = isinstance(names, (list, tuple))
-    if not returnlist:
+    if not returnlist and names is not None:
         names = [names]
     
     try:
         mod = importlib.import_module(module, package=package)
-        if names is not None:
+        if names is None:
+            return mod
+        else:
             ret = []
             for name in names:
                 if hasattr(mod, name):
                     ret.append(getattr(mod, name))
                 else:
                     ret.append(OptionalImportError(ImportError("cannot import name '%s' from '%s' (%s)" % (name, module, mod.__file__))))
-            if returnlist:
-                return ret
-            else:
-                return ret[0]
+            return ret if returnlist else ret[0]
     except ImportError as exc:
         mod = OptionalImportError(exc)
         if returnlist:
