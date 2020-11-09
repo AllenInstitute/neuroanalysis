@@ -481,6 +481,12 @@ class Recording(Container):
     def sync_recording(self):
         return self._sync_recording
 
+    @property
+    def stimulus(self):
+        if self._meta.get('stimulus') is None:
+            self._meta['stimulus'] = self.loader.load_stimulus(self)
+        return self._meta.get('stimulus')
+
     def time_slice(self, start, stop):
         return RecordingView(self, start, stop)
 
@@ -598,15 +604,6 @@ class PatchClampRecording(Recording):
         """The state of the membrane patch. E.g. 'whole cell', 'cell attached', 'loose seal', 'bath', 'inside out', 'outside out'
         """
         return self._meta['patch_mode']
-
-    @property
-    def stimulus(self):
-        #### Is there a good reason only PatchClampRecordings should have a stimulus property. I'm thinking 
-        #### this should be moved to recording it might make sense for Fidelity or LED recordings to also have a stimulus
-        ####    -- in this case loader will be responsible for deciding whether or not a recording has a stimulus and for loading it.
-        if self._meta.get('stimulus') is None:
-            self._meta['stimulus'] = self.loader.load_stimulus(self)
-        return self._meta.get('stimulus')
 
     @property
     def holding_potential(self):
