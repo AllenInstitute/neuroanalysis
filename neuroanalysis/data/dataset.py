@@ -481,6 +481,12 @@ class Recording(Container):
     def sync_recording(self):
         return self._sync_recording
 
+    @property
+    def stimulus(self):
+        if self._meta.get('stimulus') is None:
+            self._meta['stimulus'] = self.loader.load_stimulus(self)
+        return self._meta.get('stimulus')
+
     def time_slice(self, start, stop):
         return RecordingView(self, start, stop)
 
@@ -600,15 +606,6 @@ class PatchClampRecording(Recording):
         return self._meta['patch_mode']
 
     @property
-    def stimulus(self):
-        #### Is there a good reason only PatchClampRecordings should have a stimulus property. I'm thinking 
-        #### this should be moved to recording it might make sense for Fidelity or LED recordings to also have a stimulus
-        ####    -- in this case loader will be responsible for deciding whether or not a recording has a stimulus and for loading it.
-        if self._meta.get('stimulus') is None:
-            self._meta['stimulus'] = self.loader.load_stimulus(self)
-        return self._meta.get('stimulus')
-
-    @property
     def holding_potential(self):
         """The command holding potential if the recording is voltage-clamp, or the
         resting membrane potential if the recording is current-clamp.
@@ -664,13 +661,11 @@ class PatchClampRecording(Recording):
         if self._baseline_regions is None:
             self._baseline_regions = self.loader.get_baseline_regions(self)
         return self._baseline_regions
-        #raise Exception('PatchClampRecording.baseline_regions is deprecated. Please use an Analyzer to find baseline_regions instead.')
 
     @property
     def baseline_data(self):
         """All items in baseline_regions concatentated into a single trace.
         """
-        #raise Exception('PatchClampRecording.baseline_data is deprecated. Please us an Analyzer instead.')
         if self._baseline_data is None:
             data = [self['primary'].time_slice(start,stop).data for start,stop in self.baseline_regions]
             if len(data) == 0:
@@ -687,7 +682,6 @@ class PatchClampRecording(Recording):
 
         See float_mode()
         """
-        #raise Exception('PatchClampRecording.baseline_potential is deprecated. Please us an Analyzer instead.')
         if self.meta['baseline_potential'] is None:
             if self.clamp_mode == 'vc':
                 self.meta['baseline_potential'] = self.meta['holding_potential']
@@ -704,8 +698,6 @@ class PatchClampRecording(Recording):
 
         See float_mode()
         """
-        #raise Exception('PatchClampRecording.baseline_current is deprecated. Please us an Analyzer instead.')
-
         if self.meta['baseline_current'] is None:
             if self.clamp_mode == 'ic':
                 self.meta['baseline_current'] = self.meta['holding_current']
@@ -720,8 +712,6 @@ class PatchClampRecording(Recording):
     def baseline_rms_noise(self):
         """The standard deviation of all data from quiescent regions in the recording.
         """
-        #raise Exception('PatchClampRecording.baseline_rms_noise is deprecated. Please us an Analyzer instead.')
-
         if self.meta['baseline_rms_noise'] is None:
             data = self.baseline_data.data
             if len(data) == 0:

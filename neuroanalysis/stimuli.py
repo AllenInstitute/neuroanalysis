@@ -241,12 +241,21 @@ class Stimulus(object):
         """
         state = OrderedDict([
             ('type', self.type),
-            ('args', OrderedDict([('start_time', self.start_time)])),
+            ('args', OrderedDict([('start_time', float(self.start_time))])),
         ])
         for name in self._attributes:
-            state['args'][name] = getattr(self, name)
+            state['args'][name] = self._save_value(getattr(self, name))
         state['items'] = [item.save() for item in self.items]
         return state
+
+    @classmethod
+    def _save_value(cls, val):
+        if isinstance(val, np.floating):
+            return float(val)
+        elif isinstance(val, np.integer):
+            return int(val)
+        else:
+            return val
 
     @classmethod
     def load(cls, state):
@@ -270,8 +279,8 @@ class Stimulus(object):
             raise KeyError('Unknown stimulus class "%s"' % name)
         return cls._subclasses[name]
 
-class LazyLoadStimulus(Stimulus):
 
+class LazyLoadStimulus(Stimulus):
     def __init__(self, description, start_time=0, units=None, items=None, parent=None, loader=None, source=None):
         if loader is None:
             raise Exception("Use of a LazyLoadStimulus requires a loader to be specified upon init.")
@@ -281,7 +290,6 @@ class LazyLoadStimulus(Stimulus):
         Stimulus.__init__(self, description, start_time=start_time, units=units, items=items, parent=parent)
         self._loader = loader
         self._source = source
-
 
     @property
     def items(self):
@@ -461,7 +469,6 @@ def find_noisy_square_pulses(trace, baseline=None, std_threshold=5.0, min_durati
     return pulses
 
 
-
 class SquarePulseTrain(Stimulus):
     """A train of identical, regularly-spaced square pulses.
 
@@ -508,6 +515,50 @@ class SquarePulseTrain(Stimulus):
         """A list of the start times of all pulses in the train.
         """
         return [item.start_time for item in self.items]
+
+    def save(self):
+        state = Stimulus.save(self)
+        state['items'] = []  # don't save auto-generated items
+        return state
+        
+
+class SquarePulseSeries(Stimulus):
+    """A series of square pulses of varying amplitude, duration, and timing.
+
+    Parameters
+    ----------
+    start_time : float
+        The starting time of the first pulse in the train, relative to the start time of the parent
+        stimulus.
+    pulse_times : float array
+        Array of starting times for each pulse relative to *start_time*.
+    pulse_durations : float array
+        Array of pulse durations in seconds.
+    amplitudes : float array
+        Array of pulse amplitudes.
+    description : str
+        Optional string describing the stimulus.
+    units : str | None
+        Optional string describing the units of values in the stimulus.
+    """
+    _attributes = Stimulus._attributes + ['pulse_times', 'pulse_durations', 'amplitudes']
+
+    def __init__(self, start_time, pulse_times, pulse_durations, amplitudes, description="square pulse train", units=None, parent=None):
+        self.pulse_times = pulse_times
+        self.pulse_durations = pulse_durations
+        self.amplitudes = amplitudes
+        assert len(pulse_times) == len(pulse_durations) == len(amplitudes)
+        Stimulus.__init__(self, description=description, start_time=start_time, units=units, parent=parent)
+
+        for i,t in enumerate(pulse_times):
+            pulse = SquarePulse(start_time=t, duration=pulse_durations[i], amplitude=amplitudes[i], parent=self, units=units)
+            pulse.pulse_number = i
+
+    @property
+    def global_pulse_times(self):
+        """A list of the global start times of all pulses in the train.
+        """
+        return [t + self.global_start_time for t in self.pulse_times]
 
     def save(self):
         state = Stimulus.save(self)
