@@ -737,17 +737,27 @@ class MiesStimulus(stimuli.Stimulus):
                         )
                     elif stim_type == 'Pulse Train':
                         assert epoch['Poisson distribution'] == 'False', "Poisson distributed pulse train not supported"
-                        assert epoch['Mixed frequency'] == 'False', "Mixed frequency pulse train not supported"
                         assert epoch['Pulse Type'] == 'Square', "Pulse train with %s pulse type not supported"
-                        item = stimuli.SquarePulseTrain(
-                            start_time=t,
-                            n_pulses=int(epoch['Number of pulses']),
-                            pulse_duration=float(epoch['Pulse duration']) * 1e-3,
-                            amplitude=float(epoch['Amplitude']) * scale,
-                            interval=float(epoch['Pulse To Pulse Length']) * 1e-3,
-                            description=name,
-                            units=units,
-                        )
+                        if epoch['Mixed frequency'] == 'True':
+                            ptimes = [float(pt) * 1e-3 for pt in epoch['Pulse Train Pulses'].split(',') if pt.strip() != '']
+                            item = stimuli.SquarePulseSeries(
+                                start_time=t,
+                                pulse_times=ptimes,
+                                pulse_durations=[float(epoch['Pulse duration']) * 1e-3] * len(ptimes),
+                                amplitudes=[float(epoch['Amplitude']) * scale] * len(ptimes),
+                                description=name,
+                                units=units,
+                            )
+                        else:
+                            item = stimuli.SquarePulseTrain(
+                                start_time=t,
+                                n_pulses=int(epoch['Number of pulses']),
+                                pulse_duration=float(epoch['Pulse duration']) * 1e-3,
+                                amplitude=float(epoch['Amplitude']) * scale,
+                                interval=float(epoch['Pulse To Pulse Length']) * 1e-3,
+                                description=name,
+                                units=units,
+                            )
                     elif stim_type == 'Sin Wave':
                         # bug in stim wave note version 2: log chirp field is inverted
                         is_chirp = epoch['Log chirp'] == ('False' if version <= 2 else 'True')

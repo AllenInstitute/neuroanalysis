@@ -661,13 +661,11 @@ class PatchClampRecording(Recording):
         if self._baseline_regions is None:
             self._baseline_regions = self.loader.get_baseline_regions(self)
         return self._baseline_regions
-        #raise Exception('PatchClampRecording.baseline_regions is deprecated. Please use an Analyzer to find baseline_regions instead.')
 
     @property
     def baseline_data(self):
         """All items in baseline_regions concatentated into a single trace.
         """
-        #raise Exception('PatchClampRecording.baseline_data is deprecated. Please us an Analyzer instead.')
         if self._baseline_data is None:
             data = [self['primary'].time_slice(start,stop).data for start,stop in self.baseline_regions]
             if len(data) == 0:
@@ -684,7 +682,6 @@ class PatchClampRecording(Recording):
 
         See float_mode()
         """
-        #raise Exception('PatchClampRecording.baseline_potential is deprecated. Please us an Analyzer instead.')
         if self.meta['baseline_potential'] is None:
             if self.clamp_mode == 'vc':
                 self.meta['baseline_potential'] = self.meta['holding_potential']
@@ -701,8 +698,6 @@ class PatchClampRecording(Recording):
 
         See float_mode()
         """
-        #raise Exception('PatchClampRecording.baseline_current is deprecated. Please us an Analyzer instead.')
-
         if self.meta['baseline_current'] is None:
             if self.clamp_mode == 'ic':
                 self.meta['baseline_current'] = self.meta['holding_current']
@@ -717,8 +712,6 @@ class PatchClampRecording(Recording):
     def baseline_rms_noise(self):
         """The standard deviation of all data from quiescent regions in the recording.
         """
-        #raise Exception('PatchClampRecording.baseline_rms_noise is deprecated. Please us an Analyzer instead.')
-
         if self.meta['baseline_rms_noise'] is None:
             data = self.baseline_data.data
             if len(data) == 0:
