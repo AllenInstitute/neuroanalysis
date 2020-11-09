@@ -172,7 +172,7 @@ class Psp2(FitModel):
         return out
 
 
-def fit_psp(data, search_window, clamp_mode, sign=0, exp_baseline=True, baseline_like_psp=False, refine=True, init_params=None, decay_tau_bounds=None, rise_time_bounds=None, fit_kws=None, ui=None):
+def fit_psp(data, search_window, clamp_mode, sign=0, exp_baseline=True, baseline_like_psp=False, refine=True, init_params=None, decay_tau_bounds=None, rise_time_bounds=None, fit_kws=None, ui=None, max_nfev=500):
     """Fit a Trace instance to a StackedPsp model.
     
     This function is a higher-level interface to StackedPsp.fit:    
@@ -208,6 +208,8 @@ def fit_psp(data, search_window, clamp_mode, sign=0, exp_baseline=True, baseline
         (min, max) values for rise_time. Default bounds are the initial value for rise_time 0.1 and 10.
     fit_kws : dict
         Extra keyword arguments to send to the minimizer
+    max_nfev : int
+        Maxmimum number of function evaluations
     
     Returns
     -------
@@ -232,7 +234,6 @@ def fit_psp(data, search_window, clamp_mode, sign=0, exp_baseline=True, baseline
         init_params = {}
 
     method = 'leastsq'
-    fit_kws.setdefault('maxfev', 500)
 
     # good fit, slow
     # method = 'Nelder-Mead'
@@ -342,7 +343,7 @@ def fit_psp(data, search_window, clamp_mode, sign=0, exp_baseline=True, baseline
     # Find best coarse fit 
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        search = SearchFit(psp, [xoffset], params=base_params, x=data.time_values, data=data.data, fit_kws=fit_kws, method=method)
+        search = SearchFit(psp, [xoffset], params=base_params, x=data.time_values, data=data.data, fit_kws=fit_kws, max_nfev=max_nfev, method=method)
     for i,result in enumerate(search.iter_fit()):
         pass
         # prof('  coarse fit iteration %d/%d: %s %s' % (i, len(search), result['param_index'], result['params']))
