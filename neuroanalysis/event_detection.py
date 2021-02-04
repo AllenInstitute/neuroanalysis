@@ -99,7 +99,7 @@ def zero_crossing_events(data, min_length=3, min_peak=0.0, min_sum=0.0, noise_th
 
 def threshold_events(trace, threshold, adjust_times=True, baseline=0.0, omit_ends=True):
     """
-    Finds regions in a trace that cross a threshold value (as measured by distance from baseline). Returns the index, length, peak, and sum of each event.
+    Finds regions in a TSeries that cross a threshold value (as measured by distance from baseline). Returns the index, length, peak, and sum of each event.
     Optionally adjusts index to an extrapolated baseline-crossing.
     """
     threshold = abs(threshold)

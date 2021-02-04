@@ -803,3 +803,9 @@ class MiesStimulus(stimuli.Stimulus):
                 t += duration
                 if item is not None:
                     self.append_item(item)
+
+    def save(self):
+        data = stimuli.Stimulus.save(self)
+        # don't use this class name when saving; just reload as Stimulus.
+        data['type'] = 'Stimulus'
+        return data
