@@ -1,2 +1,4 @@
 *.pyc
 neuroanalysis.egg-info
+build/
+dist/
