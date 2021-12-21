@@ -205,9 +205,12 @@ class PatchClampStimPulseAnalyzer(GenericStimPulseAnalyzer):
         # Detect pulse times
         pulses = self.pulses()
 
+        # filter out test pulse if it exists
+        stim_pulses = pulses[1:] if self.rec.has_inserted_test_pulse else pulses
+        
         # cut out a chunk for each pulse
         chunks = []
-        for i,pulse in enumerate(pulses):
+        for i,pulse in enumerate(stim_pulses):
             pulse_start_time, pulse_end_time, amp = pulse
             if amp < 0:
                 # assume negative pulses do not evoke spikes
@@ -216,15 +219,16 @@ class PatchClampStimPulseAnalyzer(GenericStimPulseAnalyzer):
             # cut out a chunk of the recording for spike detection
             start_time = pulse_start_time - 2e-3
             stop_time = pulse_end_time + 4e-3
-            if i < len(pulses) - 1:
+            if i < len(stim_pulses) - 1:
                 # truncate chunk if another pulse is present
-                next_pulse_time = pulses[i+1][0]
-                stop_time = min(stop_time, next_pulse_time)
+                next_pulse_time = stim_pulses[i+1][0]
+                stop_time = min(stop_time, next_pulse_time) # is this getting reset?
             chunk = self.rec.time_slice(start_time, stop_time)
             chunk.meta['pulse_edges'] = [pulse_start_time, pulse_end_time]
             chunk.meta['pulse_amplitude'] = amp
             chunk.meta['pulse_n'] = i
             chunks.append(chunk)
+            
         return chunks
 
     def evoked_spikes(self):
