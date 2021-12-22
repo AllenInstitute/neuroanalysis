@@ -222,7 +222,7 @@ class PatchClampStimPulseAnalyzer(GenericStimPulseAnalyzer):
             if i < len(stim_pulses) - 1:
                 # truncate chunk if another pulse is present
                 next_pulse_time = stim_pulses[i+1][0]
-                stop_time = min(stop_time, next_pulse_time) # is this getting reset?
+                stop_time = min(stop_time, next_pulse_time)
             chunk = self.rec.time_slice(start_time, stop_time)
             chunk.meta['pulse_edges'] = [pulse_start_time, pulse_end_time]
             chunk.meta['pulse_amplitude'] = amp
