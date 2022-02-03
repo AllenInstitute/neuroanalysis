@@ -3,7 +3,7 @@ import sys
 from datetime import datetime
 from collections import OrderedDict
 import numpy as np
-import h5py
+from .util import h5py_wrapper
 
 from .data import Dataset, SyncRecording, PatchClampRecording, TSeries
 from .test_pulse import PatchClampTestPulse
@@ -202,7 +202,7 @@ class MiesNwb(Dataset):
         if self._hdf is not None:
             return
         try:
-            self._hdf = h5py.File(self.filename, 'r')
+            self._hdf = h5py_wrapper.File(self.filename, 'r')
         except Exception:
             print("Error opening: %s" % self.filename)
             raise
