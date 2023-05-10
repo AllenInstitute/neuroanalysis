@@ -821,7 +821,7 @@ class Psp(Stimulus):
 
     @property
     def duration(self):
-        return 6 * max(self.rise_time, self.decay_tau)
+        return 15 * max(self.rise_time, self.decay_tau)
 
     def eval(self, **kwds):
         trace = Stimulus.eval(self, **kwds)
