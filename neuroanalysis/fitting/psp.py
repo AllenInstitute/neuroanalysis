@@ -73,9 +73,17 @@ class Psp(FitModel):
             
     @staticmethod
     def _compute_rise_tau(rise_time, rise_power, decay_tau):
+        # rt1 = scipy.optimize.fsolve(Psp._rise_time_from_tau, (rise_time,), (rise_time, rise_power, decay_tau))[0]
+
         rt_over_td = rise_time / (rise_power * decay_tau)
-        denom = np.real(lambertw(-rt_over_td * np.exp(-rt_over_td), k=-1) + rt_over_td)
-        return - rise_time / denom
+
+        # lambert W returns real solutions for k=0 and k=-1, but we don't necessarily know which is better..
+        denom1 = np.real(lambertw(-rt_over_td * np.exp(-rt_over_td), k=-1) + rt_over_td)
+        denom2 = np.real(lambertw(-rt_over_td * np.exp(-rt_over_td), k=0) + rt_over_td)
+        denom = denom1 if abs(denom1) > abs(denom2) else denom2
+
+        rt2 = - rise_time / denom
+        return rt2
 
     @staticmethod
     @numba_jit(nopython=True)
