@@ -1,5 +1,5 @@
 import pyqtgraph as pg
-from pyqtgraph.Qt import QtGui, QtCore
+from pyqtgraph.Qt import QtWidgets, QtCore
 from neuroanalysis.miesnwb import MiesNwb
 from ..signal import SignalBlock
 
@@ -8,7 +8,7 @@ from .analyzer_view import AnalyzerView
 from ...util.merge_lists import merge_lists
 
 
-class MiesNwbExplorer(QtGui.QSplitter):
+class MiesNwbExplorer(QtWidgets.QSplitter):
     """Widget for listing and selecting recordings in a MIES-generated NWB file.
     """
     selection_changed = QtCore.Signal(object)
@@ -16,30 +16,30 @@ class MiesNwbExplorer(QtGui.QSplitter):
     check_state_changed = QtCore.Signal(object)
 
     def __init__(self, nwb=None):
-        QtGui.QSplitter.__init__(self)
+        QtWidgets.QSplitter.__init__(self)
         self.setOrientation(QtCore.Qt.Vertical)
 
         self._nwb = None
         self._channel_selection = {}
 
-        self._sel_box = QtGui.QWidget()
-        self._sel_box_layout = QtGui.QHBoxLayout()
+        self._sel_box = QtWidgets.QWidget()
+        self._sel_box_layout = QtWidgets.QHBoxLayout()
         self._sel_box_layout.setContentsMargins(0, 0, 0, 0)
         self._sel_box.setLayout(self._sel_box_layout)
         self.addWidget(self._sel_box)
-        self.sweep_tree = QtGui.QTreeWidget()
+        self.sweep_tree = QtWidgets.QTreeWidget()
         columns = ['ID', 'Stim Name', 'Clamp Mode', 'Holding V', 'Holding I']
         self.sweep_tree.setColumnCount(len(columns))
         self.sweep_tree.setHeaderLabels(columns)
-        self.sweep_tree.setSelectionMode(QtGui.QAbstractItemView.ExtendedSelection)
+        self.sweep_tree.setSelectionMode(QtWidgets.QAbstractItemView.ExtendedSelection)
         self._sel_box_layout.addWidget(self.sweep_tree)
         
-        self.channel_list = QtGui.QListWidget()
+        self.channel_list = QtWidgets.QListWidget()
         self.channel_list.setMaximumWidth(50)
         self._sel_box_layout.addWidget(self.channel_list)
         self.channel_list.itemChanged.connect(self._channel_list_changed)
 
-        self.meta_tree = QtGui.QTreeWidget()
+        self.meta_tree = QtWidgets.QTreeWidget()
         self.addWidget(self.meta_tree)
 
         self.set_nwb(nwb)
@@ -88,12 +88,12 @@ class MiesNwbExplorer(QtGui.QSplitter):
                 else:
                     I_holdings += '?? '
                     
-            item = QtGui.QTreeWidgetItem([str(i), stim_name, modes, V_holdings, I_holdings])
+            item = QtWidgets.QTreeWidgetItem([str(i), stim_name, modes, V_holdings, I_holdings])
             item.setCheckState(0, QtCore.Qt.Unchecked)
             item.data = sweep
             self.sweep_tree.addTopLevelItem(item)
  
-        self.sweep_tree.header().resizeSections(QtGui.QHeaderView.ResizeToContents)
+        self.sweep_tree.header().resizeSections(QtWidgets.QHeaderView.ResizeToContents)
 
     def selection(self):
         """Return a list of selected groups and/or sweeps. 
@@ -151,7 +151,7 @@ class MiesNwbExplorer(QtGui.QSplitter):
             
             # add new items to the channel list, all selected
             for ch in channels:
-                item = QtGui.QListWidgetItem(str(ch))
+                item = QtWidgets.QListWidgetItem(str(ch))
                 item.channel_index = ch
                 self._channel_selection.setdefault(ch, True)
                 # restore previous check state, if any.
@@ -184,10 +184,10 @@ class MiesNwbExplorer(QtGui.QSplitter):
         for k in keys:
             vals = [m.get(k) for m in meta]
             if isinstance(vals[0], dict):
-                item = QtGui.QTreeWidgetItem([k] + [''] * len(meta))
+                item = QtWidgets.QTreeWidgetItem([k] + [''] * len(meta))
                 self._populate_meta_tree(vals, item)
             else:
-                item = QtGui.QTreeWidgetItem([k] + [str(v) for v in vals])
+                item = QtWidgets.QTreeWidgetItem([k] + [str(v) for v in vals])
             root.addChild(item)
 
     def _tree_item_changed(self, item, col):
@@ -200,25 +200,25 @@ class MiesNwbExplorer(QtGui.QSplitter):
         self._channel_selection[item.channel_index] = item.checkState() == QtCore.Qt.Checked
 
 
-class MiesNwbViewer(QtGui.QWidget):
+class MiesNwbViewer(QtWidgets.QWidget):
     """Combination of a MiesNwvExplorer for selecting sweeps and a tab widget
     containing multiple views, each performing a different analysis.
     """
     analyzer_changed = QtCore.Signal(object)
     
     def __init__(self, nwb=None):
-        QtGui.QWidget.__init__(self)
+        QtWidgets.QWidget.__init__(self)
         self.nwb = nwb
         
-        self.layout = QtGui.QGridLayout()
+        self.layout = QtWidgets.QGridLayout()
         self.layout.setContentsMargins(0, 0, 0, 0)
         self.setLayout(self.layout)
 
-        self.hsplit = QtGui.QSplitter()
+        self.hsplit = QtWidgets.QSplitter()
         self.hsplit.setOrientation(QtCore.Qt.Horizontal)
         self.layout.addWidget(self.hsplit, 0, 0)
         
-        self.vsplit = QtGui.QSplitter()
+        self.vsplit = QtWidgets.QSplitter()
         self.vsplit.setOrientation(QtCore.Qt.Vertical)
         self.hsplit.addWidget(self.vsplit)
 
@@ -230,10 +230,10 @@ class MiesNwbViewer(QtGui.QWidget):
         self.ptree = pg.parametertree.ParameterTree()
         self.vsplit.addWidget(self.ptree)
         
-        self.tabs = QtGui.QTabWidget()
+        self.tabs = QtWidgets.QTabWidget()
         self.hsplit.addWidget(self.tabs)
         
-        self.reload_btn = QtGui.QPushButton("Reload views")
+        self.reload_btn = QtWidgets.QPushButton("Reload views")
         self.reload_btn.clicked.connect(self.reload_views)
         self.vsplit.addWidget(self.reload_btn)
 
@@ -319,11 +319,11 @@ class MiesNwbViewer(QtGui.QWidget):
 
 
 
-class AnalysisView(QtGui.QWidget):
+class AnalysisView(QtWidgets.QWidget):
     """Example skeleton for an analysis view.
     """
     def __init__(self, parent=None):
-        QtGui.QWidget.__init__(self, parent)
+        QtWidgets.QWidget.__init__(self, parent)
         
         # Views must have self.params
         # This implements the controls that are unique to this view.

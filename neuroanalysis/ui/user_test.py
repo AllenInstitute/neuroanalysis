@@ -6,10 +6,10 @@ class UserTestUi(object):
     def __init__(self, expected_display, current_display):
         pg.mkQApp()
 
-        self.widget = pg.QtGui.QSplitter(pg.QtCore.Qt.Vertical)
+        self.widget = pg.QtWidgets.QSplitter(pg.QtCore.Qt.Vertical)
         self.widget.resize(1600, 1000)
 
-        self.display_splitter = pg.QtGui.QSplitter(pg.QtCore.Qt.Horizontal)
+        self.display_splitter = pg.QtWidgets.QSplitter(pg.QtCore.Qt.Horizontal)
         self.widget.addWidget(self.display_splitter)
         
         self.display1 = expected_display
@@ -17,15 +17,15 @@ class UserTestUi(object):
         self.display_splitter.addWidget(self.display1.widget)
         self.display_splitter.addWidget(self.display2.widget)
 
-        self.ctrl = pg.QtGui.QWidget()
+        self.ctrl = pg.QtWidgets.QWidget()
         self.widget.addWidget(self.ctrl)
-        self.ctrl_layout = pg.QtGui.QVBoxLayout()
+        self.ctrl_layout = pg.QtWidgets.QVBoxLayout()
         self.ctrl.setLayout(self.ctrl_layout)
         self.diff_widget = pg.DiffTreeWidget()
         self.ctrl_layout.addWidget(self.diff_widget)
 
-        self.pass_btn = pg.QtGui.QPushButton('pass')
-        self.fail_btn = pg.QtGui.QPushButton('fail')
+        self.pass_btn = pg.QtWidgets.QPushButton('pass')
+        self.fail_btn = pg.QtWidgets.QPushButton('fail')
         self.ctrl_layout.addWidget(self.pass_btn)
         self.ctrl_layout.addWidget(self.fail_btn)
 
@@ -44,7 +44,7 @@ class UserTestUi(object):
     def user_passfail(self):
         self.widget.show()
         while True:
-            pg.QtGui.QApplication.processEvents()
+            pg.QtWidgets.QApplication.processEvents()
             last_btn_clicked = self.last_btn_clicked
             self.last_btn_clicked = None
 

@@ -26,4 +26,4 @@ sd = STAAnalyzer(boc, expt_id, cell_id)
 
 
 if not sys.flags.interactive:
-    pg.QtGui.QApplication.exec_()
+    pg.QtWidgets.QApplication.exec_()

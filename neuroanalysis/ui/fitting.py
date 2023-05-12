@@ -1,24 +1,22 @@
 from collections import OrderedDict
 import numpy as np
 import scipy.stats
-from pyqtgraph.Qt import QtGui, QtCore
+from pyqtgraph.Qt import QtWidgets, QtCore
 import pyqtgraph as pg
-import pyqtgraph.parametertree
 import lmfit.minimizer 
-import sys
 
 
-class FitExplorer(QtGui.QWidget):
+class FitExplorer(QtWidgets.QWidget):
     def __init__(self, fit=None, model=None, data=None, args=None):
-        QtGui.QWidget.__init__(self)
+        QtWidgets.QWidget.__init__(self)
         self.model = model if model is not None else fit.model
         self.args = args
         self.data = data
         self.fit = None
         
-        self.layout = QtGui.QGridLayout()
+        self.layout = QtWidgets.QGridLayout()
         self.setLayout(self.layout)
-        self.splitter = QtGui.QSplitter(QtCore.Qt.Horizontal)
+        self.splitter = QtWidgets.QSplitter(QtCore.Qt.Horizontal)
         self.layout.addWidget(self.splitter)
         self.ptree = pg.parametertree.ParameterTree(showHeader=False)
         self.splitter.addWidget(self.ptree)

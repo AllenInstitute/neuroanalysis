@@ -1,5 +1,5 @@
 import pyqtgraph as pg
-from pyqtgraph.Qt import QtGui, QtCore
+from pyqtgraph.Qt import QtWidgets, QtCore
 import numpy as np
 from neuroanalysis.data import TSeries
 from neuroanalysis.ui.event_detection import EventDetector
@@ -15,7 +15,7 @@ traces = {n:TSeries(data[n], dt=1.0/data['sample_rates'][i]) for i,n in enumerat
 evd = EventDetector()
 evd.params['threshold'] = 5e-10
 
-hs = QtGui.QSplitter(QtCore.Qt.Horizontal)
+hs = QtWidgets.QSplitter(QtCore.Qt.Horizontal)
 pt = pg.parametertree.ParameterTree(showHeader=False)
 
 params = pg.parametertree.Parameter.create(name='params', type='group', children=[

@@ -1,17 +1,17 @@
 import pyqtgraph as pg
-from pyqtgraph.Qt import QtGui, QtCore
+from pyqtgraph.Qt import QtWidgets, QtCore
 from ..plot_grid import PlotGrid
 
 
-class AnalyzerView(QtGui.QWidget):
+class AnalyzerView(QtWidgets.QWidget):
     """A sweep analyzer of unspecified function.
     """
     def __init__(self, parent=None):
         self.sweeps = []
 
-        QtGui.QWidget.__init__(self, parent)
+        QtWidgets.QWidget.__init__(self, parent)
 
-        self.layout = QtGui.QGridLayout()
+        self.layout = QtWidgets.QGridLayout()
         self.setLayout(self.layout)
         self.layout.setContentsMargins(0, 0, 0, 0)
 

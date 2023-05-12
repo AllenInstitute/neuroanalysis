@@ -2,19 +2,19 @@ import numpy as np
 from scipy.ndimage import gaussian_filter
 import pyqtgraph as pg
 import pyqtgraph.reload
-from pyqtgraph.Qt import QtGui, QtCore
+from pyqtgraph.Qt import QtWidgets, QtCore
 from ..plot_grid import PlotGrid
 from ...miesnwb import MiesNwb
 
 
-class SweepView(QtGui.QWidget):
+class SweepView(QtWidgets.QWidget):
     def __init__(self, parent=None):
         self.sweeps = []
         self.chans = None
 
-        QtGui.QWidget.__init__(self, parent)
+        QtWidgets.QWidget.__init__(self, parent)
 
-        self.layout = QtGui.QGridLayout()
+        self.layout = QtWidgets.QGridLayout()
         self.setLayout(self.layout)
         self.layout.setContentsMargins(0, 0, 0, 0)
 

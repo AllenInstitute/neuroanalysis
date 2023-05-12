@@ -17,7 +17,7 @@ class PspFitUI(object):
         
         self.console = pg.console.ConsoleWidget()
         
-        self.widget = pg.QtGui.QSplitter(pg.QtCore.Qt.Vertical)
+        self.widget = pg.QtWidgets.QSplitter(pg.QtCore.Qt.Vertical)
         self.widget.addWidget(self.pw)        
         self.widget.addWidget(self.console)
         self.widget.resize(1000, 600)

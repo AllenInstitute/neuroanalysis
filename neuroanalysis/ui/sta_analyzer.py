@@ -1,6 +1,6 @@
 import numpy as np
 import pyqtgraph as pg
-from pyqtgraph.Qt import QtGui, QtCore
+from pyqtgraph.Qt import QtWidgets, QtCore
 import pyqtgraph.parametertree as pt
 from .cell_selector import CellSelector
 from .event_detection import EventDetector
@@ -8,7 +8,7 @@ from .triggered_average import TriggeredAverager
 from ..data import TSeries
 
 
-class STAAnalyzer(QtGui.QWidget):
+class STAAnalyzer(QtWidgets.QWidget):
     """Analyzer for running spike-triggered averaging on BOb calcium imaging data.
     
     Features:
@@ -44,11 +44,11 @@ class STAAnalyzer(QtGui.QWidget):
         # make stimulus frame locations easier to look up
         self.lsn_id = None
         
-        QtGui.QWidget.__init__(self)
-        self.hs = pg.QtGui.QSplitter()
+        QtWidgets.QWidget.__init__(self)
+        self.hs = pg.QtWidgets.QSplitter()
         self.hs.setOrientation(pg.QtCore.Qt.Horizontal)
 
-        self.vs1 = pg.QtGui.QSplitter()
+        self.vs1 = pg.QtWidgets.QSplitter()
         self.vs1.setOrientation(pg.QtCore.Qt.Vertical)
 
         self.params = pt.Parameter(name='params', type='group', children=[
@@ -66,7 +66,7 @@ class STAAnalyzer(QtGui.QWidget):
         
         self.vs1.addWidget(self.expt_imv)
 
-        self.vs2 = pg.QtGui.QSplitter()
+        self.vs2 = pg.QtWidgets.QSplitter()
         self.vs2.setOrientation(pg.QtCore.Qt.Vertical)
 
         self.plt1 = pg.PlotWidget()
@@ -84,7 +84,7 @@ class STAAnalyzer(QtGui.QWidget):
         self.hs.addWidget(self.vs1)
         self.hs.addWidget(self.vs2)
         
-        self.layout = QtGui.QGridLayout()
+        self.layout = QtWidgets.QGridLayout()
         self.setLayout(self.layout)
         self.layout.addWidget(self.hs)
         

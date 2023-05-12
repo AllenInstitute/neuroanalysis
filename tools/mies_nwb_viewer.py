@@ -1,9 +1,9 @@
 import os, sys
-from pyqtgraph.Qt import QtGui
+from pyqtgraph.Qt import QtWidgets
 from neuroanalysis.ui.nwb_viewer import MiesNwbViewer
 from neuroanalysis.miesnwb import MiesNwb
 
-app = QtGui.QApplication([])
+app = QtWidgets.QApplication([])
 
 # create NWB viewer
 v = MiesNwbViewer()

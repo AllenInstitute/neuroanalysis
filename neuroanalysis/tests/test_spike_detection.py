@@ -104,5 +104,5 @@ if __name__ == '__main__':
             test_pulse(amp, ra)
 
             # redraw after every new test
-            pg.QtGui.QApplication.processEvents()
+            pg.QtWidgets.QApplication.processEvents()
         
