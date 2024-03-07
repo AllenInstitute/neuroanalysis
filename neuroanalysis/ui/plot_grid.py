@@ -1,16 +1,16 @@
 import pyqtgraph as pg
-from pyqtgraph.Qt import QtGui, QtCore
+from . import qt
 
 
-class PlotGrid(QtGui.QWidget):
+class PlotGrid(qt.QWidget):
     def __init__(self, parent=None):
-        QtGui.QWidget.__init__(self, parent)
+        qt.QWidget.__init__(self, parent)
         
         self.rows = 0
         self.cols = 0
         self.plots = []
         
-        self.layout = QtGui.QGridLayout()
+        self.layout = qt.QGridLayout()
         self.layout.setSpacing(0)
         self.layout.setContentsMargins(0, 0, 0, 0)
         self.setLayout(self.layout)
