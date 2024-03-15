@@ -1,7 +1,7 @@
 import numpy as np
 
 from .data import PatchClampRecording, TSeries
-from .fitting import Exp
+from .fitting.exp import exp_fit, exp_decay
 from .stimuli import find_square_pulses
 
 
@@ -107,16 +107,16 @@ class PatchClampTestPulse(PatchClampRecording):
         clamp_mode = self.clamp_mode
         
         data = self['primary']
-        pulse_start = data.index_at(self.stimulus.start_time)
-        pulse_stop = data.index_at(self.stimulus.start_time + self.stimulus.duration)
+        
+        pulse_start = data.t0 + self.stimulus.start_time
+        pulse_stop = pulse_start + self.stimulus.duration
         dt = data.dt
         
         # Extract specific time segments
-        nudge = int(50e-6 / dt)
-        base = data[:pulse_start-nudge]
-        pulse = data[pulse_start+nudge:pulse_stop-nudge]
-        pulse_end = pulse[int(len(pulse)*2./3.):]  # last 1/3 of pulse response 
-        end = data[pulse_stop+nudge:]
+        padding = 50e-6
+        base = data.time_slice(None, pulse_start-padding)
+        pulse = data.time_slice(pulse_start+padding, pulse_stop-padding)
+        self.pulse_tseries = pulse
         
         # Exponential fit
 
@@ -127,35 +127,79 @@ class PatchClampTestPulse(PatchClampRecording):
         if clamp_mode == 'vc':
             ari = pulse_amp / access_r
             iri = pulse_amp / input_r
-            params = {
-                'xoffset': (pulse.t0, 'fixed'),
-                'yoffset': base_median + iri,
-                'amp': ari - iri,
-                'tau': (1e-3, 0.1e-3, 50e-3),
-            }
+            # params = {
+            #     'xoffset': (pulse.t0, 'fixed'),
+            #     'yoffset': base_median + iri,
+            #     'amp': ari - iri,
+            #     'tau': (1e-3, 0.1e-3, 50e-3),
+            # }
         else:
             bridge = meta['bridge_balance']
             arv = pulse_amp * (access_r - bridge)
             irv = pulse_amp * input_r
-            params = {
-                'xoffset': pulse.t0,
-                'yoffset': base_median+arv+irv,
-                'amp': -irv,
-                'tau': (10e-3, 1e-3, 50e-3),
-            }
+            # params = {
+            #     'xoffset': pulse.t0,
+            #     'yoffset': base_median+arv+irv,
+            #     'amp': -irv,
+            #     'tau': (10e-3, 1e-3, 50e-3),
+            # }
             
-        fit_kws = {'tol': 1e-4}
-        model = Exp()
+        # fit_kws = {'tol': 1e-4}
         
         # ignore initial transients when fitting
         fit_region = pulse.time_slice(pulse.t0 + 150e-6, None)
-        
-        result = model.fit(fit_region.data, x=fit_region.time_values, fit_kws=fit_kws, params=params)
-        fit = result.best_values
-        err = model.nrmse(result)
-        
-        self.fit_trace = TSeries(result.eval(), time_values=fit_region.time_values)
-        
+
+        # fit the exponential decay
+        result = exp_fit(fit_region)
+        self.fit_result = result
+        # exp curve using fit parameters
+        self.fit_trace = TSeries(
+            result['model'](fit_region.time_values), 
+            time_values=fit_region.time_values)
+        # model the exp curve using initial parameters
+        self.initial_fit_trace = TSeries(
+            exp_decay(fit_region.time_values, *result['initial_guess']),
+            time_values=fit_region.time_values)
+
+        # final fit parameters
+        fit_yoffset, fit_amp, fit_tau = result['fit']
+
+        # custom double-exp fit to capture pipette transients
+        prepulse_median = np.median(data.time_slice(pulse_start-5e-3, pulse_start).data)
+        def dexp_decay(t, yoffset, tau, xoffset):
+            amp = prepulse_median - yoffset
+            return exp_decay(t, yoffset, amp, tau, xoffset) + result['model'](t) - yoffset
+        y0 = self.fit_result['model'](pulse.t0)
+        guess_amp = base_median - y0
+        initial_guess = (
+            y0, 
+            10e-6,
+            pulse_start,
+        )
+        bounds = (
+            [base_median, 0, pulse_start-5e-6], 
+            [y0-guess_amp, 200e-6, pulse_start+100e-6]
+        )
+        for i in range(len(bounds[0])):
+            bounds[0][i], bounds[1][i] = min(bounds[0][i], bounds[1][i]), max(bounds[0][i], bounds[1][i])
+        pulse_pip_transient = data.time_slice(pulse_start, pulse_start + 5e-3)
+        import scipy.optimize
+        fit = scipy.optimize.curve_fit(
+            f=dexp_decay,
+            xdata=pulse_pip_transient.time_values, 
+            ydata=pulse_pip_transient.data, 
+            p0=initial_guess, 
+            bounds=bounds, 
+            # ftol=1e-8, gtol=1e-8,
+        )
+        print(fit)
+
+        transient_start = fit[0][2]
+        tvals = np.arange(transient_start, pulse_stop-padding, dt)
+        self.fit_trace = TSeries(dexp_decay(tvals, *fit[0]), time_values=tvals)
+        self.initial_fit_trace = TSeries(dexp_decay(tvals, *initial_guess), time_values=tvals)
+        pip_transient_yoffset, pip_transient_tau, pip_transient_xoffset = fit[0]
+
         ### fit again using shorter data
         ### this should help to avoid fitting against h-currents
         #tau4 = fit1[0][2]*10
@@ -178,7 +222,7 @@ class PatchClampTestPulse(PatchClampRecording):
                 base_v = None
             base_i = base_median
             
-            input_step = fit['yoffset'] - base_i
+            input_step = fit_yoffset - base_i
             
             peak_rgn = pulse.time_slice(pulse.t0, pulse.t0 + 1e-3)
             if pulse_amp >= 0:
@@ -206,19 +250,20 @@ class PatchClampTestPulse(PatchClampRecording):
                 base_i = self['command'].data[0] + hc
             else:
                 base_i = None
-            y0 = result.eval(x=pulse.t0)
+            # y0 = self.fit_result['model'](pulse_start)
+            y0 = pip_transient_yoffset
             
             if pulse_amp >= 0:
-                v_step = max(1e-5, fit['yoffset'] - y0)
+                v_step = max(1e-5, fit_yoffset - y0)
             else:
-                v_step = min(-1e-5, fit['yoffset'] - y0)
+                v_step = min(-1e-5, fit_yoffset - y0)
                 
             if pulse_amp == 0:
                 pulse_amp = 1e-14
                 
             input_r = (v_step / pulse_amp)
-            access_r = ((y0 - base_median) / pulse_amp) + bridge
-            tau = fit['tau']
+            access_r = ((y0 - prepulse_median) / pulse_amp) + bridge
+            tau = fit_tau
             cap = tau / input_r
 
         self._analysis = {
