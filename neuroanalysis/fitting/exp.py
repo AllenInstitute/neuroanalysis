@@ -19,7 +19,7 @@ def estimate_exp_params(data):
     Returns
     -------
     params : tuple
-        (yoffset, yscale, tau)
+        (yoffset, yscale, tau, toffset)
     """
     start_y = data.data[:len(data.data)//100].mean()
     end_y = data.data[-len(data.data)//10:].mean()
@@ -77,6 +77,16 @@ class Exp(FitModel):
     def fit(self, *args, **kwds):
         kwds.setdefault('method', 'nelder')
         return FitModel.fit(self, *args, **kwds)
+
+
+class ParallelCapAndResist(FitModel):
+    @staticmethod
+    def current_at_t(t, v_over_parallel_r, v_over_total_r, tau, xoffset=0):
+        exp = np.exp(-(t - xoffset) / tau)
+        return v_over_total_r * (1 - exp) + v_over_parallel_r * exp
+
+    def __init__(self):
+        super().__init__(self.current_at_t, independent_vars=['t'], nan_policy='omit', method='least-squares')
 
 
 class Exp2(FitModel):

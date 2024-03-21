@@ -7,10 +7,12 @@ Luke Campagnola 2015
 """
 
 from collections import OrderedDict
+
 import numpy as np
 import scipy.interpolate
-from ..units import *
+
 from .components import Mechanism, Channel
+from ..units import MOhm, us, ms, mS, pF, pA, mV, cm
 
 
 class PatchClamp(Mechanism):
@@ -38,14 +40,12 @@ class PatchClamp(Mechanism):
         else:
             last_start, last_dt, last_cmd = self.cmd_queue[-1]
             next_start = last_start + len(last_cmd) * last_dt
-            
+
         if start is None:
             start = next_start
-        else:
-            if start < next_start:
-                raise ValueError('Cannot start next command before %f; asked for %f.' % 
-                                 (next_start, start))
-        
+        elif start < next_start:
+            raise ValueError(f'Cannot start next command before {next_start:f}; asked for {start:f}.')
+
         self.cmd_queue.append((start, dt, cmd))
         return start
     

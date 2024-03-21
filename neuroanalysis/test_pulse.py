@@ -133,7 +133,7 @@ class PatchClampTestPulse(PatchClampRecording):
             #     'amp': ari - iri,
             #     'tau': (1e-3, 0.1e-3, 50e-3),
             # }
-        else:
+        else:  # current clamp
             bridge = meta['bridge_balance']
             arv = pulse_amp * (access_r - bridge)
             irv = pulse_amp * input_r
@@ -233,16 +233,13 @@ class PatchClampTestPulse(PatchClampRecording):
                 input_step = min(-1e-16, input_step)
                 access_step = peak_rgn.data.min() - base_i
                 access_step = min(-1e-16, access_step)
-            
+
             access_r = pulse_amp / access_step
             input_r = pulse_amp / input_step
-            
-            # No capacitance in VC mode yet; the methods
-            # we've tried don't work very well.
-            tau = None
-            cap = None
-        
-        else:
+            tau = fit_tau
+            cap = tau * (1 / access_r + 1 / input_r)
+
+        else:  # IC mode
             base_v = base_median
             hc = self.meta['holding_current']
             if hc is not None:
@@ -270,7 +267,7 @@ class PatchClampTestPulse(PatchClampRecording):
             'input_resistance': input_r,
             'access_resistance': access_r,
             'capacitance': cap,
-            'time_constant': tau,
+            'time_constant': fit_tau,
             'baseline_potential': base_v,
             'baseline_current': base_i,
         }

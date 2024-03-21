@@ -1,7 +1,7 @@
 import numpy as np
 from . import Sim, Section, Leak, LGKfast, LGKslow, LGNa, Noise, PatchClamp
 from ..data import TSeries, PatchClampRecording
-from ..units import um, mS, uV, mV, pA, cm, MOhm, ms
+from ..units import mS, uV, mV, pA, cm, MOhm, ms
 
 
 class ModelCell(object):
@@ -23,7 +23,7 @@ class ModelCell(object):
         # Add channels to the membrane
         self.mechs = {
             'leak': Leak(gbar=1.0*mS/cm**2, erev=-75*mV),
-            'leak0': Leak(gbar=0, erev=0), # simulate dying cell
+            'leak0': Leak(gbar=0, erev=0),  # simulate dying cell
             'lgkfast': LGKfast(gbar=225*mS/cm**2),
             'lgkslow': LGKslow(gbar=0.225*mS/cm**2),
             'lgkna': LGNa(),

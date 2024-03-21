@@ -965,7 +965,6 @@ class TSeries(Container):
             inds = np.where(dif0 < dif1, inds0, inds1)
             if np.isscalar(t):
                 inds = int(inds)
-            return inds
         else:
             # Be careful to avoid fp precision errors when converting back to integer index
             sample_rate = self._meta.get('sample_rate')
@@ -984,9 +983,10 @@ class TSeries(Container):
                 raise ValueError("index_mode must be 'round', 'ceil', or 'floor'; got %r" % index_mode)
 
             if np.isscalar(t):
-                return int(inds)        
+                inds = int(inds)
             else:
-                return inds.astype(int)
+                inds = inds.astype(int)
+        return min(max(0, inds), len(self) - 1)
 
     @property
     def time_values(self):

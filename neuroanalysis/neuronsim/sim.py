@@ -10,8 +10,7 @@ github.com/campagnola/neurodemo
 from collections import OrderedDict
 import numpy as np
 import scipy.integrate
-from ..units import us
-import warnings
+from ..units import us, ms
 
 
 class Sim(object):
@@ -30,7 +29,8 @@ class Sim(object):
                 self.add(obj)
 
     def set_integrator(self, integrator:str):
-        assert integrator in ["odeint", "solve_ivp"]
+        if integrator not in {"odeint", "solve_ivp"}:
+            raise ValueError(f"Unknown integrator: {integrator}")
         self.integrator = integrator
 
     def change_dt(self, newdt:float=100e-6):
@@ -53,10 +53,7 @@ class Sim(object):
                     continue
                 for k, v in o.all_objects().items():
                     if k in objs:
-                        raise NameError(
-                            'Multiple objects with same name "%s": %s, %s'
-                            % (k, objs[k], v)
-                        )
+                        raise NameError(f'Multiple objects with same name "{k}": {objs[k]}, {v}')
                     objs[k] = v
             self._all_objs = objs
         return self._all_objs
@@ -74,17 +71,17 @@ class Sim(object):
         # reset all_objs cache in case some part of the sim has changed
         self._all_objs = None
         all_objs = self.all_objects().values()
-        
+
         # check that there is something to simulate
         if len(all_objs) == 0:
             raise RuntimeError("No objects added to simulation.")
-        
+
         # Collect / prepare state variables for integration
         init_state = []
         difeq_vars = []
         dep_vars = {}
         for o in all_objs:
-            pfx = o.name + '.'
+            pfx = f'{o.name}.'
             for k, v in o.difeq_state().items():
                 difeq_vars.append(pfx + k)
                 init_state.append(v)
@@ -92,14 +89,14 @@ class Sim(object):
                 dep_vars[pfx + k] = v
         self._simstate = SimState(difeq_vars, dep_vars)
         t = np.arange(0, samples) * self.dt + self._time
-        
+
         opts = {"rtol": 1e-6, "atol": 1e-8, "hmax": 5e-4, "full_output": 1}
         opts.update(kwds)
 
         if self.integrator == 'odeint':
             # Run the simulation
             result, info = scipy.integrate.odeint(self.derivatives, init_state, t, tfirst=True, **opts)
-            
+
             # Update current state variables
             p = 0
             for o in all_objs:
@@ -131,7 +128,7 @@ class Sim(object):
                 t_eval=t,
                 y0=init_state,
                 method="LSODA",  # runs ok with LSODA
- 
+
                 dense_output=False,
                 # args=dep_vars,
                 rtol = opts['rtol'], #**opts,
@@ -140,7 +137,7 @@ class Sim(object):
             )
             # Update current state variables
             p = 0
-            for i, o in enumerate(all_objs):
+            for o in all_objs:
                 nvar = len(o.difeq_state())
                 # print("solve ivp state: ", p, nvar, result.y[p:p+nvar, -1])
                 o.update_state(result.y[p:p+nvar, -1])
@@ -220,7 +217,7 @@ class SimState(object):
             return self.get_slice(key)
         # allow lookup by (object, var)
         if isinstance(key, tuple):
-            key = key[0].name + "." + key[1]
+            key = f"{key[0].name}.{key[1]}"
         try:
             # try this first for speed
             return self.state[self.indexes[key]]
@@ -237,7 +234,7 @@ class SimState(object):
     def __contains__(self, key):
         # allow lookup by (object, var)
         if isinstance(key, tuple):
-            key = key[0].name + "." + key[1]
+            key = f"{key[0].name}.{key[1]}"
         return key in self.indexes or key in self.dep_vars or key in self.extra
 
     def __str__(self):
@@ -260,13 +257,13 @@ class SimState(object):
         return self.get_state_at_index(index)
 
     def get_state_at_index(self, index):
-        state = {}
         s = self.copy()
         clip = not np.isscalar(self["t"])
         if clip:
             # only get results for the last timepoint
             s.set_state(self.state[:, index])
             
+        state = {}
         for k in self.difeq_vars:
             state[k] = s[k]
         for k in self.dep_vars:
