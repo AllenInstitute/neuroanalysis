@@ -8,7 +8,7 @@ from .stimuli import find_square_pulses
 class PatchClampTestPulse(PatchClampRecording):
     """A PatchClampRecording that contains a subthreshold, square pulse stimulus.
     """
-    def __init__(self, rec, indices=None):
+    def __init__(self, rec: PatchClampRecording, indices=None):
         self._parent_recording = rec
         
         if indices is None:
@@ -236,8 +236,7 @@ class PatchClampTestPulse(PatchClampRecording):
 
             access_r = pulse_amp / access_step
             input_r = pulse_amp / input_step
-            tau = fit_tau
-            cap = tau * (1 / access_r + 1 / input_r)
+            cap = fit_tau * (1 / access_r + 1 / input_r)
 
         else:  # IC mode
             base_v = base_median

@@ -15,13 +15,10 @@ systems.
 This abstraction layer also helps to enforce good coding practice by separating data representation,
 analysis, and visualization.
 """
-from __future__ import division
+from collections import OrderedDict
 
 import numpy as np
-import scipy.signal
-from .. import util
-from collections import OrderedDict
-from ..stats import ragged_mean
+
 from ..baseline import float_mode
 from ..filter import downsample
 
@@ -219,7 +216,6 @@ class Dataset(Container):
         return self.contents
     
     
-
 # class RecordingSequence(Container):
 
 # For now, possibly forever, remove the concept of Sequences from datasets. 
