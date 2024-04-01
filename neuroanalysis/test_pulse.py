@@ -267,6 +267,9 @@ class PatchClampTestPulse(PatchClampRecording):
             'access_resistance': access_r,
             'capacitance': cap,
             'time_constant': fit_tau,
+            'fit_yoffset': fit_yoffset,
+            'fit_xoffset': pulse.t0,
+            'fit_amplitude': fit_amp,
             'baseline_potential': base_v,
             'baseline_current': base_i,
         }
