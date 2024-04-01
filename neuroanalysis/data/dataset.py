@@ -1147,6 +1147,10 @@ class TSeries(Container):
         """
         return self._recording
 
+    @recording.setter
+    def recording(self, new_val):
+        self._recording = new_val
+
     def copy(self, data=None, time_values=None, **kwds):
         """Return a copy of this TSeries.
         
