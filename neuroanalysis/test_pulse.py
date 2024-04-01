@@ -1,4 +1,5 @@
 import numpy as np
+import scipy.optimize
 
 from .data import PatchClampRecording, TSeries
 from .fitting.exp import exp_fit, exp_decay
@@ -183,7 +184,7 @@ class PatchClampTestPulse(PatchClampRecording):
         for i in range(len(bounds[0])):
             bounds[0][i], bounds[1][i] = min(bounds[0][i], bounds[1][i]), max(bounds[0][i], bounds[1][i])
         pulse_pip_transient = data.time_slice(pulse_start, pulse_start + 5e-3)
-        import scipy.optimize
+
         fit = scipy.optimize.curve_fit(
             f=dexp_decay,
             xdata=pulse_pip_transient.time_values, 
@@ -259,8 +260,7 @@ class PatchClampTestPulse(PatchClampRecording):
                 
             input_r = (v_step / pulse_amp)
             access_r = ((y0 - prepulse_median) / pulse_amp) + bridge
-            tau = fit_tau
-            cap = tau / input_r
+            cap = fit_tau / input_r
 
         self._analysis = {
             'input_resistance': input_r,
