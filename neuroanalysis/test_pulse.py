@@ -122,27 +122,27 @@ class PatchClampTestPulse(PatchClampRecording):
 
         # predictions
         base_median = np.median(base.data)
-        access_r = 10e6
-        input_r = 200e6
-        if clamp_mode == 'vc':
-            ari = pulse_amp / access_r
-            iri = pulse_amp / input_r
-            # params = {
-            #     'xoffset': (pulse.t0, 'fixed'),
-            #     'yoffset': base_median + iri,
-            #     'amp': ari - iri,
-            #     'tau': (1e-3, 0.1e-3, 50e-3),
-            # }
-        else:  # current clamp
-            bridge = meta['bridge_balance']
-            arv = pulse_amp * (access_r - bridge)
-            irv = pulse_amp * input_r
-            # params = {
-            #     'xoffset': pulse.t0,
-            #     'yoffset': base_median+arv+irv,
-            #     'amp': -irv,
-            #     'tau': (10e-3, 1e-3, 50e-3),
-            # }
+        # access_r = 10e6
+        # input_r = 200e6
+        # if clamp_mode == 'vc':
+        #     # ari = pulse_amp / access_r
+        #     # iri = pulse_amp / input_r
+        #     # params = {
+        #     #     'xoffset': (pulse.t0, 'fixed'),
+        #     #     'yoffset': base_median + iri,
+        #     #     'amp': ari - iri,
+        #     #     'tau': (1e-3, 0.1e-3, 50e-3),
+        #     # }
+        #     pass
+        # else:  # current clamp
+        #     # arv = pulse_amp * (access_r - bridge)
+        #     # irv = pulse_amp * input_r
+        #     # params = {
+        #     #     'xoffset': pulse.t0,
+        #     #     'yoffset': base_median+arv+irv,
+        #     #     'amp': -irv,
+        #     #     'tau': (10e-3, 1e-3, 50e-3),
+        #     # }
             
         # fit_kws = {'tol': 1e-4}
         
