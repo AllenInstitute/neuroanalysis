@@ -13,6 +13,121 @@ import scipy.integrate
 from ..units import us, ms
 
 
+class SimState(object):
+    """Contains the state of all diff. eq. variables in the simulation.
+
+    During simulation runs, this is used to carry information about all
+    variables at the current timepoint. After the simulation finishes, this is
+    used to carry all state variable data collected during the simulation.
+
+    Parameters
+    ==========
+        difeq_vars: list
+            Names of all diff. eq. state variables
+        dep_vars: dict
+            Name:function pairs for all dependent variables that may be computed
+        difeq_state: list
+            Initial values for all dif. eq. state variables
+        extra:
+            Extra name:value pairs that may be accessed from this object
+    """
+
+    def __init__(self, difeq_vars, dep_vars=None, difeq_state=None, integrator='odeint', **extra):
+        self.difeq_vars = difeq_vars
+        # record indexes of difeq vars for fast retrieval
+        self.indexes = dict([(k, i) for i, k in enumerate(difeq_vars)])
+
+        self.dep_vars = dep_vars
+        self.state = difeq_state
+
+        self.extra = extra
+        self.integrator = integrator
+
+    def set_state(self, difeq_state):
+        self.state = difeq_state
+
+    def __getitem__(self, key):
+        if isinstance(key, slice):
+            return self.get_slice(key)
+        # allow lookup by (object, var)
+        if isinstance(key, tuple):
+            key = f"{key[0].name}.{key[1]}"
+        try:
+            # try this first for speed
+            return self.state[self.indexes[key]]
+        except KeyError:
+            if key in self.dep_vars:
+                return self.dep_vars[key](self)
+            else:
+                return self.extra[key]
+
+    def keys(self):
+        return self.difeq_vars + list(self.extra.keys())
+        # return list(self.indexes.keys()) + list(self.dep_vars.keys()) + list(self.extra.keys())
+
+    def __contains__(self, key):
+        # allow lookup by (object, var)
+        if isinstance(key, tuple):
+            key = f"{key[0].name}.{key[1]}"
+        return key in self.indexes or key in self.dep_vars or key in self.extra
+
+    def __str__(self):
+        rep = f"SimState {id(self)}:\n"
+        if self.state is not None:
+            for i, k in enumerate(self.difeq_vars):
+                rep += f"  {k} = {self.state[i][-1]}\n"
+        else:
+            rep += "  (no state)\n"
+        return rep
+
+    def get_final_state(self):
+        """Return a dictionary of all diff. eq. state variables and dependent
+        variables for all objects in the simulation.
+        """
+        return self.get_state_at_index(-1)
+
+    def get_state_at_time(self, t):
+        index = np.searchsorted(self['t'], t)
+        return self.get_state_at_index(index)
+
+    def get_state_at_index(self, index):
+        s = self.copy()
+        clip = not np.isscalar(self["t"])
+        if clip:
+            # only get results for the last timepoint
+            s.set_state(self.state[:, index])
+
+        state = {}
+        for k in self.difeq_vars:
+            state[k] = s[k]
+        for k in self.dep_vars:
+            state[k] = s[k]
+        for k, v in self.extra.items():
+            if clip:
+                state[k] = v[index]
+            else:
+                state[k] = v
+
+        return state
+
+    def get_slice(self, sl):
+        kwds = {'difeq_state': self.state[:, sl]}
+        for k, v in self.extra.items():
+            kwds[k] = v[sl]
+        return self.copy(**kwds)
+
+    def copy(self, **kwds):
+        default_kwds = {
+            'difeq_vars': self.difeq_vars,
+            'dep_vars': self.dep_vars,
+            'difeq_state': self.state,
+            'integrator': self.integrator,
+        }
+        default_kwds.update(self.extra)
+        default_kwds.update(kwds)
+        return SimState(**default_kwds)
+
+
 class Sim(object):
     """Simulator for a collection of objects that derive from SimObject
     """
@@ -62,7 +177,7 @@ class Sim(object):
     def time(self):
         return self._time
 
-    def run(self, samples:int=1000, **kwds):
+    def run(self, samples:int=1000, **kwds) -> SimState:
         """Run the simulation until a number of *samples* have been acquired.
 
         Extra keyword arguments are passed to `scipy.integrate.odeint()`.
@@ -177,121 +292,6 @@ class Sim(object):
             for k, v in o.state(self._simstate).items():
                 state[k] = v
         return state
-
-
-class SimState(object):
-    """Contains the state of all diff. eq. variables in the simulation.
-    
-    During simulation runs, this is used to carry information about all
-    variables at the current timepoint. After the simulation finishes, this is
-    used to carry all state variable data collected during the simulation.
-    
-    Parameters
-    ==========
-        difeq_vars: list
-            Names of all diff. eq. state variables
-        dep_vars: dict
-            Name:function pairs for all dependent variables that may be computed
-        difeq_state: list
-            Initial values for all dif. eq. state variables
-        extra:
-            Extra name:value pairs that may be accessed from this object
-    """
-
-    def __init__(self, difeq_vars, dep_vars=None, difeq_state=None, integrator='odeint', **extra):
-        self.difeq_vars = difeq_vars
-        # record indexes of difeq vars for fast retrieval
-        self.indexes = dict([(k, i) for i, k in enumerate(difeq_vars)])
-
-        self.dep_vars = dep_vars
-        self.state = difeq_state
-
-        self.extra = extra
-        self.integrator = integrator
-
-    def set_state(self, difeq_state):
-        self.state = difeq_state
-        
-    def __getitem__(self, key):
-        if isinstance(key, slice):
-            return self.get_slice(key)
-        # allow lookup by (object, var)
-        if isinstance(key, tuple):
-            key = f"{key[0].name}.{key[1]}"
-        try:
-            # try this first for speed
-            return self.state[self.indexes[key]]
-        except KeyError:
-            if key in self.dep_vars:
-                return self.dep_vars[key](self)
-            else:
-                return self.extra[key]
-
-    def keys(self):
-        return self.difeq_vars + list(self.extra.keys())
-        # return list(self.indexes.keys()) + list(self.dep_vars.keys()) + list(self.extra.keys())
-
-    def __contains__(self, key):
-        # allow lookup by (object, var)
-        if isinstance(key, tuple):
-            key = f"{key[0].name}.{key[1]}"
-        return key in self.indexes or key in self.dep_vars or key in self.extra
-
-    def __str__(self):
-        rep = f"SimState {id(self)}:\n"
-        if self.state is not None:
-            for i, k in enumerate(self.difeq_vars):
-                rep += f"  {k} = {self.state[i][-1]}\n"
-        else:
-            rep += "  (no state)\n"
-        return rep
-
-    def get_final_state(self):
-        """Return a dictionary of all diff. eq. state variables and dependent
-        variables for all objects in the simulation.
-        """
-        return self.get_state_at_index(-1)
-
-    def get_state_at_time(self, t):
-        index = np.searchsorted(self['t'], t)
-        return self.get_state_at_index(index)
-
-    def get_state_at_index(self, index):
-        s = self.copy()
-        clip = not np.isscalar(self["t"])
-        if clip:
-            # only get results for the last timepoint
-            s.set_state(self.state[:, index])
-            
-        state = {}
-        for k in self.difeq_vars:
-            state[k] = s[k]
-        for k in self.dep_vars:
-            state[k] = s[k]
-        for k, v in self.extra.items():
-            if clip:
-                state[k] = v[index]
-            else:
-                state[k] = v
-
-        return state
-
-    def get_slice(self, sl):
-        kwds = {'difeq_state': self.state[:, sl]}
-        for k,v in self.extra.items():
-            kwds[k] = v[sl]
-        return self.copy(**kwds)
-
-    def copy(self, **kwds):
-        default_kwds = {
-            'difeq_vars': self.difeq_vars,
-            'dep_vars': self.dep_vars,
-            'difeq_state': self.state, 
-            'integrator': self.integrator,
-        }
-        default_kwds.update(self.extra)
-        default_kwds.update(kwds)
-        return SimState(**default_kwds)
 
 
 class SimObject(object):
