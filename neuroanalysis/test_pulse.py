@@ -192,7 +192,6 @@ class PatchClampTestPulse(PatchClampRecording):
             bounds=bounds, 
             # ftol=1e-8, gtol=1e-8,
         )
-        print(fit)
 
         transient_start = fit[0][2]
         tvals = np.arange(transient_start, pulse_stop-padding, dt)
@@ -262,6 +261,7 @@ class PatchClampTestPulse(PatchClampRecording):
             cap = fit_tau / input_r
 
         self._analysis = {
+            'steady_state_resistance': input_r + access_r,
             'input_resistance': input_r,
             'access_resistance': access_r,
             'capacitance': cap,
