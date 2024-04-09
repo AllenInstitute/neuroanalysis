@@ -103,7 +103,6 @@ class PatchClampTestPulse(PatchClampRecording):
     def _analyze(self):
         # adapted from ACQ4
         
-        meta = self.meta
         pulse_amp = self.stimulus.amplitude
         clamp_mode = self.clamp_mode
         
@@ -259,7 +258,7 @@ class PatchClampTestPulse(PatchClampRecording):
                 pulse_amp = 1e-14
                 
             input_r = (v_step / pulse_amp)
-            access_r = ((y0 - prepulse_median) / pulse_amp) + bridge
+            access_r = ((y0 - prepulse_median) / pulse_amp) + self.meta['bridge_balance']
             cap = fit_tau / input_r
 
         self._analysis = {
