@@ -273,11 +273,18 @@ class PatchClampTestPulse(PatchClampRecording):
             'baseline_current': base_i,
         }
         self._fit_result = result
-    
+
+    @property
+    def plot_units(self):
+        return 'A' if self.clamp_mode == 'vc' else 'V'
+
+    @property
+    def plot_title(self):
+        return 'pipette potential' if self.clamp_mode == 'vc' else 'pipette current'
+
     def plot(self):
-        self.analysis
+        assert self.analysis is not None
         import pyqtgraph as pg
-        name, units = ('pipette potential', 'V') if self.clamp_mode == 'ic' else ('pipette current', 'A')
-        plt = pg.plot(labels={'left': (name, units), 'bottom': ('time', 's')})
+        plt = pg.plot(labels={'left': (self.plot_title, self.plot_units), 'bottom': ('time', 's')})
         plt.plot(self['primary'].time_values, self['primary'].data)
         plt.plot(self.fit_trace.time_values, self.fit_trace.data, pen='b')
