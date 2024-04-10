@@ -31,8 +31,7 @@ def estimate_exp_params(data):
     else:
         tau_i = len(cs) - np.searchsorted(cs[::-1], cs[-1] * 0.63)
     tau = data.time_values[min(tau_i, len(data)-1)] - data.time_values[0]
-    params = (yoffset, yscale, tau, data.t0)
-    return params
+    return yoffset, yscale, tau, data.t0
 
 
 def normalized_rmse(data, params):

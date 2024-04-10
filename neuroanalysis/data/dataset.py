@@ -490,19 +490,14 @@ class Recording(Container):
         return self._channels[chan]
 
     def data(self):
-        #return np.concatenate([self[ch].data[:,None] for ch in self.channels], axis=1)
         return np.stack([self[ch].data for ch in self.channels], axis=-1)
 
-    # @property
-    # def parent(self):
-    #     return self.sync_recording
-    
     @property
     def children(self):
         return [self[k] for k in self.channels]
 
     def __repr__(self):
-        return "<%s device:%s, channels:%s>" %(self.__class__.__name__, self.device_type, str(self.channels))
+        return f"<{self.__class__.__name__} device:{self.device_type}, channels:{str(self.channels)}>"
 
 
 class RecordingView(Recording):
@@ -783,7 +778,7 @@ class TSeries(Container):
     meta : 
         Any extra keyword arguments are interpreted as custom metadata and added to ``self.meta``.
     """
-    def __init__(self, data=None, dt=None, t0=None, sample_rate=None, start_time=None, time_values=None, units=None, channel_id=None, recording=None, loader=None, **meta):
+    def __init__(self, data: np.ndarray = None, dt=None, t0=None, sample_rate=None, start_time=None, time_values=None, units=None, channel_id=None, recording=None, loader=None, **meta):
         Container.__init__(self, loader=loader)
         
         #if data is not None and data.ndim != 1:

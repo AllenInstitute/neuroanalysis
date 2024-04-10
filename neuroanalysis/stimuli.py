@@ -1,5 +1,4 @@
 # coding: utf8
-from __future__ import division, print_function
 from collections import OrderedDict
 import numpy as np
 from .util.custom_weakref import WeakRef
@@ -373,7 +372,7 @@ class SquarePulse(Stimulus):
         return trace
 
 
-def find_square_pulses(trace, baseline=None):
+def find_square_pulses(trace, baseline=None) -> list[SquarePulse]:
     """Return a list of SquarePulse instances describing square pulses found
     in the stimulus.
     
@@ -406,6 +405,7 @@ def find_square_pulses(trace, baseline=None):
             pulses.append(SquarePulse(start_time=t_start, duration=duration, amplitude=amp, units=trace.units))
             pulses[-1].pulse_number = i
     return pulses
+
 
 def find_noisy_square_pulses(trace, baseline=None, std_threshold=5.0, min_duration=0, min_amplitude=0):
     """Return a list of SquarePulse instances describing square pulses found

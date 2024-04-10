@@ -19,7 +19,7 @@ class PatchClampTestPulse(PatchClampRecording):
         
         pri = rec['primary'][start:stop]
         cmd = rec['command'][start:stop]
-        
+
         # find pulse
         pulses = find_square_pulses(cmd)        
         if len(pulses) == 0:
