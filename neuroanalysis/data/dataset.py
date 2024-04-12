@@ -711,21 +711,19 @@ class PatchClampRecording(Recording):
         return self.meta['baseline_rms_noise']
 
     def _descr(self):
-        mode = self.clamp_mode
-        if mode == 'vc':
+        if self.clamp_mode == 'vc':
             hp = self.holding_potential
             if hp is not None:
-                hp = int(np.round(hp*1e3))
-            extra = "mode=VC holding=%s" % hp
-        elif mode == 'ic':
+                hp = int(np.round(hp * 1e3))
+            return f"mode=VC holding={hp}"
+        else:
             hc = self.holding_current
             if hc is not None:
-                hc = int(np.round(hc*1e12))
-            extra = "mode=IC holding=%s" % hc
-        return extra
+                hc = int(np.round(hc * 1e12))
+            return f"mode=IC holding={hc}"
 
     def __repr__(self):
-        return "<%s device:%s %s>" % (self.__class__.__name__, str(self.device_id), self._descr())
+        return f"<{self.__class__.__name__} device:{self.device_id} {self._descr()}>"
 
 
 class TSeries(Container):
@@ -778,7 +776,7 @@ class TSeries(Container):
     meta : 
         Any extra keyword arguments are interpreted as custom metadata and added to ``self.meta``.
     """
-    def __init__(self, data: np.ndarray = None, dt=None, t0=None, sample_rate=None, start_time=None, time_values=None, units=None, channel_id=None, recording=None, loader=None, **meta):
+    def __init__(self, data: np.ndarray = None, dt=None, t0=None, sample_rate=None, start_time=None, time_values: np.ndarray = None, units=None, channel_id=None, recording=None, loader=None, **meta):
         Container.__init__(self, loader=loader)
         
         #if data is not None and data.ndim != 1:

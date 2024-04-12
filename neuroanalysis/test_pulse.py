@@ -16,16 +16,16 @@ class PatchClampTestPulse(PatchClampRecording):
             indices = (0, len(rec['primary']))
         self._indices = indices
         start, stop = indices
-        
+
         pri = rec['primary'][start:stop]
         cmd = rec['command'][start:stop]
 
         # find pulse
-        pulses = find_square_pulses(cmd)        
+        pulses = find_square_pulses(cmd)
         if len(pulses) == 0:
-            raise ValueError("Could not find square pulse in command waveform.")
+            raise ValueError("Could not find square pulse in command waveform. Consider using `indices`.")
         elif len(pulses) > 1:
-            raise ValueError("Found multiple square pulse in command waveform.")
+            raise ValueError("Found multiple square pulse in command waveform. Consider using `indices`.")
         pulse = pulses[0]
         pulse.description = 'test pulse'
         
@@ -42,11 +42,11 @@ class PatchClampTestPulse(PatchClampRecording):
             self._meta[k] = rec._meta[k]
             
         self._analysis = None
-        
+
     @property
     def indices(self):
         return self._indices
-        
+
     @property
     def access_resistance(self):
         """The access resistance measured from this test pulse.
@@ -214,6 +214,8 @@ class PatchClampTestPulse(PatchClampRecording):
         ## Handle analysis differently depending on clamp mode
         if clamp_mode == 'vc':
             hp = self.meta['holding_potential']
+            avg_v = self['comamnd'].data.mean() + hp
+            avg_i = self['primary'].data.mean()
             if hp is not None:
                 # we can only report base voltage if metadata includes holding potential
                 base_v = self['command'].data[0] + hp
@@ -240,6 +242,8 @@ class PatchClampTestPulse(PatchClampRecording):
         else:  # IC mode
             base_v = base_median
             hc = self.meta['holding_current']
+            avg_i = self['command'].data.mean() + hc
+            avg_v = self['primary'].data.mean()
             if hc is not None:
                 # we can only report base current if metadata includes holding current
                 base_i = self['command'].data[0] + hc
@@ -270,7 +274,9 @@ class PatchClampTestPulse(PatchClampRecording):
             'fit_xoffset': pulse.t0,
             'fit_amplitude': fit_amp,
             'baseline_potential': base_v,
+            'average_potential': avg_v,
             'baseline_current': base_i,
+            'average_current': avg_i,
         }
         self._fit_result = result
 

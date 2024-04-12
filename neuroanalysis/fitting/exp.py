@@ -105,4 +105,3 @@ class Exp2(FitModel):
         out = yoffset + amp * (np.exp(-xoff/tau1) - np.exp(-xoff/tau2))
         out[xoff < 0] = yoffset
         return out
-
