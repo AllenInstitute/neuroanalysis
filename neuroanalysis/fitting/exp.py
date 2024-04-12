@@ -1,7 +1,10 @@
+from typing import Callable
+
 import functools
 import numpy as np
 import scipy.optimize
 from .fitmodel import FitModel
+from ..data import TSeries
 
 
 def exp_decay(t, yoffset, yscale, tau, xoffset=0):
@@ -34,8 +37,8 @@ def estimate_exp_params(data):
     return yoffset, yscale, tau, data.t0
 
 
-def normalized_rmse(data, params):
-    y = exp_decay(data.time_values, *params)
+def normalized_rmse(data, params, fn: Callable=exp_decay):
+    y = fn(data.time_values, *params)
     return np.mean((y - data.data) ** 2)**0.5 / data.data.std()
 
 
@@ -55,9 +58,48 @@ def exp_fit(data):
     return {
         'fit': fit[0], 
         'result': fit, 
-        'nrmse': nrmse, 
+        'nrmse': nrmse,
         'initial_guess': initial_guess,
         'model': model,
+    }
+
+
+def fit_double_exp_decay(data: TSeries, pulse: TSeries, base_median: float, pulse_start: float, transientless_model: Callable):
+    prepulse_median = np.median(data.time_slice(pulse_start - 5e-3, pulse_start).data)
+
+    def double_exp_decay(t, yoffset, tau, xoffset):
+        amp = prepulse_median - yoffset
+        return exp_decay(t, yoffset, amp, tau, xoffset) + transientless_model(t) - yoffset
+
+    y0 = transientless_model(pulse.t0)
+    initial_guess = (
+        y0,
+        10e-6,
+        pulse_start,
+    )
+    bounds = tuple(zip(
+        sorted((y0 + y0 - base_median, base_median)),  # yoffset. y0 ± (y0 - base_median). sorted for clearer math.
+        (0, 200e-6),  # tau
+        (pulse_start - 5e-6, pulse_start + 100e-6),  # xoffset
+    ))
+    fit_region = data.time_slice(pulse_start, pulse_start + 5e-3)
+    result = scipy.optimize.curve_fit(
+        f=double_exp_decay,
+        xdata=fit_region.time_values,
+        ydata=fit_region.data,
+        p0=initial_guess,
+        bounds=bounds,
+        # ftol=1e-8, gtol=1e-8,
+    )
+    fit = result[0]
+    nrmse = normalized_rmse(pulse, fit, double_exp_decay)
+    return {
+        'fit': fit,
+        'result': result,
+        'nrmse': nrmse,
+        'initial_guess': initial_guess,
+        'model': lambda t: double_exp_decay(t, *fit),
+        'guessed_model': lambda t: double_exp_decay(t, *initial_guess),
     }
 
 

@@ -1,8 +1,7 @@
 import numpy as np
-import scipy.optimize
 
 from .data import PatchClampRecording, TSeries
-from .fitting.exp import exp_fit, exp_decay
+from .fitting.exp import exp_fit, fit_double_exp_decay
 from .stimuli import find_square_pulses
 
 
@@ -109,114 +108,31 @@ class PatchClampTestPulse(PatchClampRecording):
         padding = 50e-6
         base = data.time_slice(None, pulse_start-padding)
         pulse = data.time_slice(pulse_start+padding, pulse_stop-padding)
-        self.pulse_tseries = pulse
-        
-        # Exponential fit
-
-        # predictions
         base_median = np.median(base.data)
-        # access_r = 10e6
-        # input_r = 200e6
-        # if clamp_mode == 'vc':
-        #     # ari = pulse_amp / access_r
-        #     # iri = pulse_amp / input_r
-        #     # params = {
-        #     #     'xoffset': (pulse.t0, 'fixed'),
-        #     #     'yoffset': base_median + iri,
-        #     #     'amp': ari - iri,
-        #     #     'tau': (1e-3, 0.1e-3, 50e-3),
-        #     # }
-        #     pass
-        # else:  # current clamp
-        #     # arv = pulse_amp * (access_r - bridge)
-        #     # irv = pulse_amp * input_r
-        #     # params = {
-        #     #     'xoffset': pulse.t0,
-        #     #     'yoffset': base_median+arv+irv,
-        #     #     'amp': -irv,
-        #     #     'tau': (10e-3, 1e-3, 50e-3),
-        #     # }
-            
-        # fit_kws = {'tol': 1e-4}
-        
-        # ignore initial transients when fitting
-        fit_region = pulse.time_slice(pulse.t0 + 150e-6, None)
-
-        # fit the exponential decay
-        result = exp_fit(fit_region)
-        self.fit_result = result
-        # exp curve using fit parameters
-        self.fit_trace = TSeries(
-            result['model'](fit_region.time_values), 
-            time_values=fit_region.time_values)
-        # model the exp curve using initial parameters
-        self.initial_fit_trace = TSeries(
-            exp_decay(fit_region.time_values, *result['initial_guess']),
-            time_values=fit_region.time_values)
-
-        # final fit parameters
-        fit_yoffset, fit_amp, fit_tau = result['fit']
-
-        # custom double-exp fit to capture pipette transients
         prepulse_median = np.median(data.time_slice(pulse_start-5e-3, pulse_start).data)
-        def dexp_decay(t, yoffset, tau, xoffset):
-            amp = prepulse_median - yoffset
-            return exp_decay(t, yoffset, amp, tau, xoffset) + result['model'](t) - yoffset
-        y0 = self.fit_result['model'](pulse.t0)
-        guess_amp = base_median - y0
-        initial_guess = (
-            y0, 
-            10e-6,
-            pulse_start,
-        )
-        bounds = (
-            [base_median, 0, pulse_start-5e-6], 
-            [y0-guess_amp, 200e-6, pulse_start+100e-6]
-        )
-        for i in range(len(bounds[0])):
-            bounds[0][i], bounds[1][i] = min(bounds[0][i], bounds[1][i]), max(bounds[0][i], bounds[1][i])
-        pulse_pip_transient = data.time_slice(pulse_start, pulse_start + 5e-3)
 
-        fit = scipy.optimize.curve_fit(
-            f=dexp_decay,
-            xdata=pulse_pip_transient.time_values, 
-            ydata=pulse_pip_transient.data, 
-            p0=initial_guess, 
-            bounds=bounds, 
-            # ftol=1e-8, gtol=1e-8,
-        )
+        # start by fitting the exponential decay from the post-pipette capacitance, ignoring initial transients
+        main_fit_region = pulse.time_slice(pulse.t0 + 150e-6, None)
+        self.main_fit_result = exp_fit(main_fit_region)
+        main_fit_yoffset, main_fit_amp, main_fit_tau = self.main_fit_result['fit']
 
-        transient_start = fit[0][2]
+        # now fit with the initial transients included as an additional exponential decay
+        transient_fit_result = fit_double_exp_decay(
+            data, pulse, base_median, pulse_start, self.main_fit_result['model'])
+        transient_yoffset, transient_tau, transient_start = transient_fit_result['fit']
+
         tvals = np.arange(transient_start, pulse_stop-padding, dt)
-        self.fit_trace = TSeries(dexp_decay(tvals, *fit[0]), time_values=tvals)
-        self.initial_fit_trace = TSeries(dexp_decay(tvals, *initial_guess), time_values=tvals)
-        pip_transient_yoffset, pip_transient_tau, pip_transient_xoffset = fit[0]
+        # expose these for debugging
+        self.main_fit_trace = TSeries(self.main_fit_result['model'](tvals), time_values=tvals)
+        self.fit_trace_with_transient = TSeries(transient_fit_result['model'](tvals), time_values=tvals)
+        self.initial_double_fit_trace = TSeries(transient_fit_result['guessed_model'](tvals), time_values=tvals)
 
-        ### fit again using shorter data
-        ### this should help to avoid fitting against h-currents
-        #tau4 = fit1[0][2]*10
-        #t0 = pulse.xvals('Time')[0]
-        #shortPulse = pulse['Time': t0:t0+tau4]
-        #if shortPulse.shape[0] > 10:  ## but only if we can get enough samples from this
-            #tVals2 = shortPulse.xvals('Time')-params['delayTime']
-            #fit1 = scipy.optimize.leastsq(
-                #lambda v, t, y: y - expFn(v, t), pred1, 
-                #args=(tVals2, shortPulse['primary'].view(np.ndarray) - baseMean),
-                #maxfev=200, full_output=1)
-
-        ## Handle analysis differently depending on clamp mode
+        # Handle analysis differently depending on clamp mode
         if clamp_mode == 'vc':
-            hp = self.meta['holding_potential']
-            avg_v = self['comamnd'].data.mean() + hp
-            avg_i = self['primary'].data.mean()
-            if hp is not None:
-                # we can only report base voltage if metadata includes holding potential
-                base_v = self['command'].data[0] + hp
-            else:
-                base_v = None
+            base_v = self._meta.get('holding_potential', self['command'].data[0])
             base_i = base_median
             
-            input_step = fit_yoffset - base_i
+            input_step = main_fit_yoffset - base_i
             
             peak_rgn = pulse.time_slice(pulse.t0, pulse.t0 + 1e-3)
             if pulse_amp >= 0:
@@ -230,48 +146,38 @@ class PatchClampTestPulse(PatchClampRecording):
 
             access_r = pulse_amp / access_step
             input_r = pulse_amp / input_step
-            cap = fit_tau * (1 / access_r + 1 / input_r)
+            cap = main_fit_tau * (1 / access_r + 1 / input_r)
 
         else:  # IC mode
             base_v = base_median
-            hc = self.meta['holding_current']
-            avg_i = self['command'].data.mean() + hc
-            avg_v = self['primary'].data.mean()
-            if hc is not None:
-                # we can only report base current if metadata includes holding current
-                base_i = self['command'].data[0] + hc
-            else:
-                base_i = None
+            base_i = self._meta.get('holding_current', self['command'].data[0])
             # y0 = self.fit_result['model'](pulse_start)
-            y0 = pip_transient_yoffset
+            y0 = transient_yoffset
             
             if pulse_amp >= 0:
-                v_step = max(1e-5, fit_yoffset - y0)
+                v_step = max(1e-5, main_fit_yoffset - y0)
             else:
-                v_step = min(-1e-5, fit_yoffset - y0)
+                v_step = min(-1e-5, main_fit_yoffset - y0)
                 
             if pulse_amp == 0:
                 pulse_amp = 1e-14
                 
             input_r = (v_step / pulse_amp)
             access_r = ((y0 - prepulse_median) / pulse_amp) + self.meta['bridge_balance']
-            cap = fit_tau / input_r
+            cap = main_fit_tau / input_r
 
         self._analysis = {
             'steady_state_resistance': input_r + access_r,
             'input_resistance': input_r,
             'access_resistance': access_r,
             'capacitance': cap,
-            'time_constant': fit_tau,
-            'fit_yoffset': fit_yoffset,
+            'time_constant': main_fit_tau,
+            'fit_yoffset': main_fit_yoffset,
             'fit_xoffset': pulse.t0,
-            'fit_amplitude': fit_amp,
+            'fit_amplitude': main_fit_amp,
             'baseline_potential': base_v,
-            'average_potential': avg_v,
             'baseline_current': base_i,
-            'average_current': avg_i,
         }
-        self._fit_result = result
 
     @property
     def plot_units(self):
@@ -286,4 +192,4 @@ class PatchClampTestPulse(PatchClampRecording):
         import pyqtgraph as pg
         plt = pg.plot(labels={'left': (self.plot_title, self.plot_units), 'bottom': ('time', 's')})
         plt.plot(self['primary'].time_values, self['primary'].data)
-        plt.plot(self.fit_trace.time_values, self.fit_trace.data, pen='b')
+        plt.plot(self.fit_trace_with_transient.time_values, self.fit_trace_with_transient.data, pen='b')
