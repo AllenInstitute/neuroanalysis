@@ -10,8 +10,6 @@ class PatchClampTestPulse(PatchClampRecording):
     """A PatchClampRecording that contains a subthreshold, square pulse stimulus.
     """
     def __init__(self, rec: PatchClampRecording, indices=None):
-        self._parent_recording = rec
-        
         if indices is None:
             indices = (0, len(rec['primary']))
         self._indices = indices
@@ -28,19 +26,20 @@ class PatchClampTestPulse(PatchClampRecording):
             raise ValueError("Found multiple square pulse in command waveform. Consider using `indices`.")
         pulse = pulses[0]
         pulse.description = 'test pulse'
-        
-        PatchClampRecording.__init__(self,
-            device_type=rec.device_type, 
+        super().__init__(
+            recording=rec,
+            device_type=rec.device_type,
             device_id=rec.device_id,
             start_time=rec.start_time,
-            channels={'primary': pri, 'command': cmd}
-        )        
-        self._meta['stimulus'] = pulse
-                           
-        for k in ['clamp_mode', 'holding_potential', 'holding_current', 'bridge_balance',
-                  'lpf_cutoff', 'pipette_offset']:
-            self._meta[k] = rec._meta[k]
-            
+            channels={'primary': pri, 'command': cmd},
+            stimulus=pulse,
+            clamp_mode=rec.clamp_mode,
+            holding_potential=rec._meta['holding_potential'],
+            holding_current=rec._meta['holding_current'],
+            bridge_balance=rec._meta['bridge_balance'],
+            lpf_cutoff=rec._meta['lpf_cutoff'],
+            pipette_offset=rec._meta['pipette_offset'],
+        )
         self._analysis = None
 
     @property
@@ -94,12 +93,6 @@ class PatchClampTestPulse(PatchClampRecording):
             self._analyze()
         return self._analysis
  
-    @property
-    def parent(self):
-        """The recording in which this test pulse is embedded.
-        """
-        return self._parent_recording
-
     def _analyze(self):
         # adapted from ACQ4
         
