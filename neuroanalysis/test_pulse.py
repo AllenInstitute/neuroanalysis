@@ -40,6 +40,12 @@ class PatchClampTestPulse(PatchClampRecording):
             pipette_offset=rec._meta['pipette_offset'],
         )
         self._analysis = None
+        # expose these for display and debugging
+        self.main_fit_result = None
+        self.main_fit_trace = None
+        self.fit_result_with_transient = None
+        self.fit_trace_with_transient = None
+        self.initial_double_fit_trace = None
 
     @property
     def indices(self):
@@ -115,17 +121,20 @@ class PatchClampTestPulse(PatchClampRecording):
         main_fit_region = pulse.time_slice(pulse.t0 + 150e-6, None)
         self.main_fit_result = exp_fit(main_fit_region)
         main_fit_yoffset, main_fit_amp, main_fit_tau = self.main_fit_result['fit']
+        self.main_fit_trace = TSeries(self.main_fit_result['model'](pulse.time_values), time_values=pulse.time_values)
 
         # now fit with the initial transients included as an additional exponential decay
-        transient_fit_result = fit_double_exp_decay(
-            data, pulse, base_median, pulse_start, self.main_fit_result['model'])
-        transient_yoffset, transient_tau, transient_start = transient_fit_result['fit']
+        try:
+            self.fit_result_with_transient = fit_double_exp_decay(
+                data, pulse, base_median, pulse_start, self.main_fit_result['model'])
+            transient_yoffset = self.fit_result_with_transient['fit'][0]
 
-        tvals = np.arange(transient_start, pulse_stop-padding, dt)
-        # expose these for debugging
-        self.main_fit_trace = TSeries(self.main_fit_result['model'](tvals), time_values=tvals)
-        self.fit_trace_with_transient = TSeries(transient_fit_result['model'](tvals), time_values=tvals)
-        self.initial_double_fit_trace = TSeries(transient_fit_result['guessed_model'](tvals), time_values=tvals)
+            self.fit_trace_with_transient = TSeries(
+                self.fit_result_with_transient['model'](pulse.time_values), time_values=pulse.time_values)
+            self.initial_double_fit_trace = TSeries(
+                self.fit_result_with_transient['guessed_model'](pulse.time_values), time_values=pulse.time_values)
+        except ValueError:
+            transient_yoffset = self.main_fit_result['model'](pulse.t0)
 
         # Handle analysis differently depending on clamp mode
         if clamp_mode == 'vc':
