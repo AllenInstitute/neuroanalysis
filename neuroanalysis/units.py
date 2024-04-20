@@ -1,4 +1,4 @@
-u"""
+"""
 Define a set of scaled unit symbols to make the code more clear
 
 All numerical values are expressed in unscaled units--V, A, s, etc. (except where otherwise specified).
