@@ -50,6 +50,11 @@ class Psp(FitModel):
         return (1.0 - np.exp(-x / rise_tau))**rise_power * np.exp(-x / decay_tau)
 
     @staticmethod
+    def _psp_max_time(rise_tau, rise_power, decay_tau):
+        """Return the time from start to peak for a psp with given parameters."""
+        return rise_tau * np.log(1 + (decay_tau * rise_power / rise_tau))
+
+    @staticmethod
     def psp_func(x, xoffset, yoffset, rise_time, decay_tau, amp, rise_power):
         """Function approximating a PSP shape. 
         """
@@ -68,19 +73,23 @@ class Psp(FitModel):
             
     @staticmethod
     def _compute_rise_tau(rise_time, rise_power, decay_tau):
-        rt_over_td = rise_time / (rise_power * decay_tau)
+        # rt1 = scipy.optimize.fsolve(Psp._rise_time_from_tau, (rise_time,), (rise_time, rise_power, decay_tau))[0]
+
+        rt_over_td = min(rise_time / (rise_power * decay_tau), 0.99999)            
 
         # lambert W returns real solutions for k=0 and k=-1, but we don't necessarily know which is better..
-        denom1 = np.real(lambertw(-rt_over_td * np.exp(-rt_over_td), k=-1) + rt_over_td)
-        denom2 = np.real(lambertw(-rt_over_td * np.exp(-rt_over_td), k=0) + rt_over_td)
-        denom = denom1 if abs(denom1) > abs(denom2) else denom2
+        denom = np.real(lambertw(-rt_over_td * np.exp(-rt_over_td), k=-1) + rt_over_td)
 
         rt2 = - rise_time / denom
         return rt2
 
     @staticmethod
+    @numba_jit(nopython=True)
+    def _rise_time_from_tau(rise_tau, rise_time, rise_power, decay_tau):
+        return rise_tau * np.log(1 + (decay_tau * rise_power / rise_tau)) - rise_time
+
+    @staticmethod
     def _compute_rise_time(rise_tau, rise_power, decay_tau):
-        """Return the time from start to peak for a psp with given parameters."""
         return rise_tau * np.log((rise_power * decay_tau + rise_tau) / rise_tau)
 
 

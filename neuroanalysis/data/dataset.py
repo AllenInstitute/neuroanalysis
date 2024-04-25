@@ -15,13 +15,10 @@ systems.
 This abstraction layer also helps to enforce good coding practice by separating data representation,
 analysis, and visualization.
 """
-from __future__ import division
+from collections import OrderedDict
 
 import numpy as np
-import scipy.signal
-from .. import util
-from collections import OrderedDict
-from ..stats import ragged_mean
+
 from ..baseline import float_mode
 from ..filter import downsample
 
@@ -219,7 +216,6 @@ class Dataset(Container):
         return self.contents
     
     
-
 # class RecordingSequence(Container):
 
 # For now, possibly forever, remove the concept of Sequences from datasets. 
@@ -494,19 +490,14 @@ class Recording(Container):
         return self._channels[chan]
 
     def data(self):
-        #return np.concatenate([self[ch].data[:,None] for ch in self.channels], axis=1)
         return np.stack([self[ch].data for ch in self.channels], axis=-1)
 
-    # @property
-    # def parent(self):
-    #     return self.sync_recording
-    
     @property
     def children(self):
         return [self[k] for k in self.channels]
 
     def __repr__(self):
-        return "<%s device:%s, channels:%s>" %(self.__class__.__name__, self.device_type, str(self.channels))
+        return f"<{self.__class__.__name__} device:{self.device_type}, channels:{str(self.channels)}>"
 
 
 class RecordingView(Recording):
@@ -720,21 +711,19 @@ class PatchClampRecording(Recording):
         return self.meta['baseline_rms_noise']
 
     def _descr(self):
-        mode = self.clamp_mode
-        if mode == 'vc':
+        if self.clamp_mode == 'vc':
             hp = self.holding_potential
             if hp is not None:
-                hp = int(np.round(hp*1e3))
-            extra = "mode=VC holding=%s" % hp
-        elif mode == 'ic':
+                hp = int(np.round(hp * 1e3))
+            return f"mode=VC holding={hp}"
+        else:
             hc = self.holding_current
             if hc is not None:
-                hc = int(np.round(hc*1e12))
-            extra = "mode=IC holding=%s" % hc
-        return extra
+                hc = int(np.round(hc * 1e12))
+            return f"mode=IC holding={hc}"
 
     def __repr__(self):
-        return "<%s device:%s %s>" % (self.__class__.__name__, str(self.device_id), self._descr())
+        return f"<{self.__class__.__name__} device:{self.device_id} {self._descr()}>"
 
 
 class TSeries(Container):
@@ -787,7 +776,7 @@ class TSeries(Container):
     meta : 
         Any extra keyword arguments are interpreted as custom metadata and added to ``self.meta``.
     """
-    def __init__(self, data=None, dt=None, t0=None, sample_rate=None, start_time=None, time_values=None, units=None, channel_id=None, recording=None, loader=None, **meta):
+    def __init__(self, data: np.ndarray = None, dt=None, t0=None, sample_rate=None, start_time=None, time_values: np.ndarray = None, units=None, channel_id=None, recording=None, loader=None, **meta):
         Container.__init__(self, loader=loader)
         
         #if data is not None and data.ndim != 1:
@@ -965,7 +954,6 @@ class TSeries(Container):
             inds = np.where(dif0 < dif1, inds0, inds1)
             if np.isscalar(t):
                 inds = int(inds)
-            return inds
         else:
             # Be careful to avoid fp precision errors when converting back to integer index
             sample_rate = self._meta.get('sample_rate')
@@ -984,9 +972,10 @@ class TSeries(Container):
                 raise ValueError("index_mode must be 'round', 'ceil', or 'floor'; got %r" % index_mode)
 
             if np.isscalar(t):
-                return int(inds)        
+                inds = int(inds)
             else:
-                return inds.astype(int)
+                inds = inds.astype(int)
+        return min(max(0, inds), len(self) - 1)
 
     @property
     def time_values(self):
@@ -1150,6 +1139,10 @@ class TSeries(Container):
         """The Recording that contains this trace.
         """
         return self._recording
+
+    @recording.setter
+    def recording(self, new_val):
+        self._recording = new_val
 
     def copy(self, data=None, time_values=None, **kwds):
         """Return a copy of this TSeries.

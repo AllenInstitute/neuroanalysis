@@ -5,8 +5,8 @@ from acq4.analysis.dataModels import PatchEPhys
 from neuroanalysis.data.dataset import Recording, SyncRecording, TSeries, PatchClampRecording
 import neuroanalysis.stimuli as stimuli
 
-class Acq4DatasetLoader(DatasetLoader):
 
+class Acq4DatasetLoader(DatasetLoader):
     def __init__(self, filepath):
 
         self._filepath = filepath
@@ -47,12 +47,11 @@ class Acq4DatasetLoader(DatasetLoader):
             elif self.dh[seq].shortName() == 'Patch': ## ignore this for now -- how should this data be represented?
                 continue
             else:
-                raise Exception('Not sure how to handle folder %s' % self.dh[seq].name())
+                raise ValueError(f'Not sure how to handle folder {self.dh[seq].name()}')
 
         #return (sync_recs, sequences)
         return sync_recs
         
-
     def get_recordings(self, sync_rec):
         """Return a dict of {device: Recording}"""
         key = sync_rec.key
@@ -74,16 +73,17 @@ class Acq4DatasetLoader(DatasetLoader):
             start_time=datetime.utcfromtimestamp(PatchEPhys.getParent(f, 'Protocol').info()['startTime'])
 
             if PatchEPhys.isClampFile(f):
-                meta = {}
-                meta['file_name'] = f.name()
-                meta['clamp_mode'] = PatchEPhys.getClampMode(f).lower()
+                meta = {
+                    'file_name': f.name(),
+                    'clamp_mode': PatchEPhys.getClampMode(f).lower(),
+                }
                 if meta['clamp_mode'] == 'vc':
                     meta['holding_current'] = PatchEPhys.getClampHoldingLevel(f)
                 elif meta['clamp_mode'] == 'ic':
                     meta['holding_potential'] = PatchEPhys.getClampHoldingLevel(f)
                     meta['bridge_balance'] = PatchEPhys.getBridgeBalanceCompensation(f)
                 else:
-                    raise Exception("dont know how to interpret %s clamp_mode" % meta['clamp_mode'])
+                    raise ValueError(f"dont know how to interpret {meta['clamp_mode']} clamp_mode")
 
                 data = f.read()
                 dt = data.axisValues(1)[1] - data.axisValues(1)[0]
@@ -100,8 +100,6 @@ class Acq4DatasetLoader(DatasetLoader):
                     )
                 rec['primary']._recording = rec
                 rec['command']._recording = rec
-
-                recordings[f.name(relativeTo=dh)] = rec
 
             else:
                 data = f.read()
@@ -129,54 +127,48 @@ class Acq4DatasetLoader(DatasetLoader):
                 for k in rec.channels:
                     rec[k]._recording = rec
 
-                recordings[f.name(relativeTo=dh)] = rec
+            recordings[f.name(relativeTo=dh)] = rec
 
         return recordings
-
 
     def get_tseries_data(self, tseries):
         """Return a numpy array of the data in the tseries."""
         #### I don't think we need this because we hand TSeries their data when we instantiate them.
         raise NotImplementedError("Must be implemented in subclass. -- This should only get called if we're using lazy loading.")
 
-    def load_stimulus(self, recording):
-        """Return an instance of stimuli.Stimulus"""
-
-        #### I don't know whether I should try to parse this from metadata, or just find square pulses in the command waveform. 
+    def load_stimulus(self, recording) -> stimuli.Stimulus:
+        #### I don't know whether I should try to parse this from metadata, or just find square pulses in the command waveform.
         ### I think finding square pulses would be simpler, but makes the assumption that pulses are square. Which is probably usually true.
         ### what if I check the wavegenerator widget data for the function name (pulse) and then findSquarepulses, or raise an exception if it's a different function?
-        if isinstance(recording, PatchClampRecording):
+        if not isinstance(recording, PatchClampRecording):
+            raise NotImplementedError('not implemented yet')
+        fh = DataManager.getFileHandle(recording.meta['file_name'])
+        seqDir = PatchEPhys.getParent(fh, 'ProtocolSequence')
+        if seqDir is not None:
+            dev_info = seqDir.info()['devices'][recording.device_id]
+
+            if dev_info['mode'].lower() == 'vc':
+                units = 'V'
+            elif dev_info['mode'].lower() == 'ic':
+                units = 'A'
+            else:
+                units = None
+
             items = []
 
-            fh = DataManager.getFileHandle(recording.meta['file_name'])
-            seqDir = PatchEPhys.getParent(fh, 'ProtocolSequence')
-            if seqDir is not None:
-                dev_info = seqDir.info()['devices'][recording.device_id]
+            if dev_info['holdingCheck']:
+                items.append(stimuli.Offset(dev_info['holdingSpin']))
 
-                if dev_info['mode'].lower() == 'vc':
-                    units = 'V'
-                elif dev_info['mode'].lower() == 'ic':
-                    units = 'A'
-                else:
-                    units = None
+            stim_pulses = PatchEPhys.getStimParams(fh)
 
-                if dev_info['holdingCheck']:
-                    items.append(stimuli.Offset(dev_info['holdingSpin']))
+            for p in stim_pulses:
+                if p['function_type'] == 'pulse':
+                    items.append(stimuli.SquarePulse(p['start'], p['length'], p['amplitude']))
+                elif p['function_type'] == 'pulseTrain':
+                    items.append(stimuli.SquarePulseTrain(p['start'], p['pulse_number'], p['length'], p['amplitude'], p['period']))
 
-                stim_pulses = PatchEPhys.getStimParams(fh)
-
-                for p in stim_pulses:
-                    if p['function_type'] == 'pulse':
-                        items.append(stimuli.SquarePulse(p['start'], p['length'], p['amplitude']))
-                    elif p['function_type'] == 'pulseTrain':
-                        items.append(stimuli.SquarePulseTrain(p['start'], p['pulse_number'], p['length'], p['amplitude'], p['period']))
-
-                desc = seqDir.shortName()[:-4]
-                return stimuli.Stimulus(desc, items=items, units=units)
-
-        else:
-            raise Exception('not implemented yet')
-        
+            desc = seqDir.shortName()[:-4]
+            return stimuli.Stimulus(desc, items=items, units=units)
 
     def load_stimulus_items(self, recording):
         """Return a list of Stimulus instances. 

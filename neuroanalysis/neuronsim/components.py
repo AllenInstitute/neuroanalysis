@@ -32,19 +32,18 @@ class Mechanism(SimObject):
     def name(self):
         if self._name is None:
             # pick a name that is unique to the section we live in
-            
+
             # first collect all names
             names = []
             if self._section is None:
                 return None
-            for o in self._section.mechanisms:
-                if isinstance(o, Mechanism) and o._name is None:
-                    # skip to avoid recursion
-                    continue
-                names.append(o.name)
-                
+            names.extend(
+                o.name
+                for o in self._section.mechanisms
+                if not isinstance(o, Mechanism) or o._name is not None
+            )
             # iterate until we find an unused name
-            pfx = self._section.name + '.'
+            pfx = f'{self._section.name}.'
             name = pfx + self.type
             i = 1
             while name in names:
@@ -144,7 +143,7 @@ class Section(SimObject):
             self.cap = cap
             self.area = cap / self.cap_bar
         else:
-            self.area = 4 * 3.1415926 * radius**2
+            self.area = 4 / 3 * 3.1415926 * radius**2
             self.cap = self.area * self.cap_bar
         self.ek = -77*mV
         self.ena = 50*mV
@@ -162,14 +161,8 @@ class Section(SimObject):
         return mech
 
     def derivatives(self, state):
-        Im = 0
-        for mech in self.mechanisms:
-            if not mech.enabled:
-                continue
-            Im += mech.current(state)
-            
-        dv = Im / self.cap
-        return [dv]
+        Im = sum(mech.current(state) for mech in self.mechanisms if mech.enabled)
+        return [Im / self.cap]
     
     def current(self, state):
         """Return the current flowing across the membrane capacitance.
@@ -182,9 +175,8 @@ class Section(SimObject):
         
         This is for introspection; not used by the integrator.
         """
-        g = 0
-        for mech in self.mechanisms:
-            if not isinstance(mech, Channel) or not mech.enabled:
-                continue
-            g += mech.conductance(state)
-        return g
+        return sum(
+            mech.conductance(state)
+            for mech in self.mechanisms
+            if isinstance(mech, Channel) and mech.enabled
+        )
