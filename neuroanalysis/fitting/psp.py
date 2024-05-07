@@ -1,8 +1,7 @@
-from __future__ import print_function, division
-
-import sys, json, warnings
+import json, warnings
 import numpy as np
 import scipy.optimize
+from scipy.special import lambertw
 from ..data import Trace
 from ..util.data_test import DataTestCase
 from ..baseline import float_mode
@@ -73,9 +72,16 @@ class Psp(FitModel):
         return output
             
     @staticmethod
-    @lru_cache(maxsize=4096)
     def _compute_rise_tau(rise_time, rise_power, decay_tau):
-        return scipy.optimize.fsolve(Psp._rise_time_from_tau, (rise_time,), (rise_time, rise_power, decay_tau))[0]
+        # rt1 = scipy.optimize.fsolve(Psp._rise_time_from_tau, (rise_time,), (rise_time, rise_power, decay_tau))[0]
+
+        rt_over_td = min(rise_time / (rise_power * decay_tau), 0.99999)            
+
+        # lambert W returns real solutions for k=0 and k=-1, but we don't necessarily know which is better..
+        denom = np.real(lambertw(-rt_over_td * np.exp(-rt_over_td), k=-1) + rt_over_td)
+
+        rt2 = - rise_time / denom
+        return rt2
 
     @staticmethod
     @numba_jit(nopython=True)

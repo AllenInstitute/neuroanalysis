@@ -1,9 +1,9 @@
 # coding: utf8
-from __future__ import division, print_function
 from collections import OrderedDict
 import numpy as np
 from .util.custom_weakref import WeakRef
 from .data import TSeries
+from .fitting import psp
 
 
 def load_stimulus(state):
@@ -372,7 +372,7 @@ class SquarePulse(Stimulus):
         return trace
 
 
-def find_square_pulses(trace, baseline=None):
+def find_square_pulses(trace, baseline=None) -> list[SquarePulse]:
     """Return a list of SquarePulse instances describing square pulses found
     in the stimulus.
     
@@ -405,6 +405,7 @@ def find_square_pulses(trace, baseline=None):
             pulses.append(SquarePulse(start_time=t_start, duration=duration, amplitude=amp, units=trace.units))
             pulses[-1].pulse_number = i
     return pulses
+
 
 def find_noisy_square_pulses(trace, baseline=None, std_threshold=5.0, min_duration=0, min_amplitude=0):
     """Return a list of SquarePulse instances describing square pulses found
@@ -777,6 +778,65 @@ class Chirp(Stimulus):
         k, r = self._kr()
         d = self.duration
         return k * np.log(r) * r ** (t/d) / (2 * np.pi * d)
+
+    def mask(self, **kwds):
+        trace = Stimulus.mask(self, **kwds)
+        start = self.global_start_time
+        chunk = trace.time_slice(start, start+self.duration, index_mode=kwds.get('index_mode'))
+        chunk.data[:] = True
+        return trace
+
+
+class Psp(Stimulus):
+    """A PSP- or PSC-shaped stimulus.
+
+    This shape is the product of rising and decaying exponentials. See ``neuroanalysis.fitting.psp.Psp``.
+
+    Parameters
+    ----------
+    start_time : float
+        The starting time (s) of the stimulus.
+    rise_time : float
+        Time (s) from stimulus start until the peak of the PSP shape.
+    decay_tau : float
+        Exponential decay time constant (s).
+    amplitude : float
+        The peak amplitude of the PSP shape.
+    rise_power : float
+        Exponent modifying the rising exponential (default is 2; larger values yield a slower initial activation, 1 yields instantaneous activation).
+    description : str
+        Optional string describing the stimulus.
+    units : str | None
+        Optional string describing the units of values in the stimulus.
+
+    """
+    _attributes = Stimulus._attributes + ['rise_time', 'decay_tau', 'amplitude', 'rise_power']
+
+    def __init__(self, start_time, rise_time, decay_tau, amplitude, rise_power=2, description="frequency chirp", units=None, parent=None):
+        self.rise_time = rise_time
+        self.decay_tau = decay_tau
+        self.amplitude = amplitude
+        self.rise_power = rise_power
+        Stimulus.__init__(self, description=description, start_time=start_time, parent=parent, units=units)
+
+    @property
+    def duration(self):
+        return 15 * max(self.rise_time, self.decay_tau)
+
+    def eval(self, **kwds):
+        trace = Stimulus.eval(self, **kwds)
+        start = self.global_start_time
+        chunk = trace.time_slice(start, start + self.duration, index_mode=kwds.get('index_mode'))
+        chunk.data[:] += psp.Psp.psp_func(
+            x=chunk.time_values,
+            xoffset=start,
+            yoffset=0,
+            rise_time=self.rise_time,
+            decay_tau=self.decay_tau,
+            amp=self.amplitude,
+            rise_power=self.rise_power,
+        )
+        return trace
 
     def mask(self, **kwds):
         trace = Stimulus.mask(self, **kwds)
