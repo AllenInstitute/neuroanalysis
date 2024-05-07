@@ -266,13 +266,13 @@ class MiesNwb(Dataset):
 
 
 class MiesTSeries(TSeries):
-    def __init__(self, recording, chan):
+    def __init__(self, recording, chan, units=None):
         start = recording._meta['start_time']
         
         # Note: this is also available in meta()['Minimum Sampling interval'],
         # but that key is missing in some older NWB files.
         dt = recording.primary_hdf.attrs['IGORWaveScaling'][1,0] / 1000.
-        TSeries.__init__(self, recording=recording, channel_id=chan, dt=dt, start_time=start)
+        TSeries.__init__(self, recording=recording, channel_id=chan, dt=dt, start_time=start, units=units)
     
     @property
     def data(self):
@@ -341,20 +341,24 @@ class MiesRecording(PatchClampRecording):
         self._meta['notebook'] = nb
         if nb['Clamp Mode'] == 0:
             self._meta['clamp_mode'] = 'vc'
+            primary_units = 'A'
+            command_units = 'V'
         else:
             self._meta['clamp_mode'] = 'ic'
             self._meta['bridge_balance'] = (
                 0.0 if nb['Bridge Bal Enable'] == 0.0 or nb['Bridge Bal Value'] is None
                 else nb['Bridge Bal Value'] * 1e6
             )
+            primary_units = 'V'
+            command_units = 'A'
         self._meta['lpf_cutoff'] = nb['LPF Cutoff']
         offset = nb['Pipette Offset']  # sometimes the pipette offset recording can fail??
         self._meta['pipette_offset'] = None if offset is None else offset * 1e-3
         datetime = MiesNwb.igorpro_date(nb['TimeStamp'])
         self.meta['start_time'] = datetime
 
-        self._channels['primary'] = MiesTSeries(self, 'primary')
-        self._channels['command'] = MiesTSeries(self, 'command')
+        self._channels['primary'] = MiesTSeries(self, 'primary', units=primary_units)
+        self._channels['command'] = MiesTSeries(self, 'command', units=command_units)
 
     @property
     def stimulus(self):
