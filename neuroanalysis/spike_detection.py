@@ -1,15 +1,10 @@
-from __future__ import division, print_function
-
-import os, pickle, traceback, warnings
 import numpy as np
-from scipy.ndimage import gaussian_filter
+import warnings
 from scipy.optimize import curve_fit
-from scipy.stats import scoreatpercentile
 
 from .data import TSeries, PatchClampRecording
-from .filter import bessel_filter
-from .baseline import mode_filter, adaptive_detrend
 from .event_detection import threshold_events
+from .filter import bessel_filter
 from .util.data_test import DataTestCase
 
 
@@ -41,7 +36,7 @@ def detect_evoked_spikes(data, pulse_edges, **kwds):
     elif data.clamp_mode == 'ic':
         return detect_ic_evoked_spikes(trace, pulse_edges, **kwds)
     else:
-        raise ValueError("Unsupported clamp mode %s" % trace.clamp_mode)
+        raise ValueError(f"Unsupported clamp mode {trace.clamp_mode}")
 
 
 def rc_decay(t, tau, Vo): 
