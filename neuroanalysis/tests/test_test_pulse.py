@@ -61,19 +61,17 @@ soma_.insert('pas')
 soma_.cm = 1.0  # capacitance in µF/cm²
 soma_.L = soma_.diam = (500 / np.pi) ** 0.5  # µm
 
-# TODO pipette capacitance
-# cmat = h.Matrix(2, 2, 2)
-# cmat.setval(0, 1, 1)
-# gmat = h.Matrix(2, 2, 2).ident()
-# y = h.Vector(2)
-# y0 = h.Vector(2)
-# b = h.Vector(2)
-# nlm = h.LinearMechanism(cmat, gmat, y, y0, b)
-
 
 def set_pip_cap(v):
+    # TODO pipette capacitance
+    cmat = h.Matrix(2, 2, 2)
+    cmat.setval(0, 1, v * uF)
+    gmat = h.Matrix(2, 2, 2).ident()
+    y = h.Vector(2)
+    y0 = h.Vector(2)
+    b = h.Vector(2)
     # mech.c = h.Matrix(1, 1, 2).from_python([[v * uF]])  # µF
-    pass
+    return h.LinearMechanism(cmat, gmat, y, y0, b)
 
 
 vc = h.SEClamp(soma_(0.5))
@@ -110,25 +108,16 @@ def create_test_pulse(
 ):
     if soma is None:
         soma = soma_
-    # ic_rec.clear()
     vc_rec.clear()
     settle = 50 * ms
     pulse = np.ones((int((settle + start + pdur + settle) // dt),)) * hold
     pulse[int((settle + start) // dt):int((settle + start + pdur) // dt)] = pamp
 
     if mode == 'ic':
-        # ic = h.IClamp(soma(0.5))
-        # ic.dur = 1e9
-        # ic.delay = 0
-        # im = h.Vector(pulse / nA)
-        # im.play(ic._ref_amp, dt)
         pre_ic = _make_ic_command(soma, hold, 0, settle + start)
         pulse_ic = _make_ic_command(soma, pamp, settle + start, pdur)
         post_ic = _make_ic_command(soma, hold, settle + start + pdur, settle)
     else:
-        # vm = h.Vector(pulse / mV)
-        # vc.dur1 = 1e9
-        # vm.play(vc._ref_amp1, dt)
         vc.dur1 = (settle + start) / ms
         vc.amp1 = hold / mV
         vc.dur2 = pdur / ms
@@ -136,13 +125,13 @@ def create_test_pulse(
         vc.dur3 = settle / ms
         vc.amp3 = hold / mV
 
-    ic_rec = h.Vector()
-    ic_rec.record(soma(0.5)._ref_v)
     vinit = -60  # mV
     vc.rs = r_access / MOhm  # Rs, in MOhms
     soma.cm = c_soma / capacitance(soma)
     set_resistance(soma, r_input)
-    set_pip_cap(c_pip)
+    # nln = set_pip_cap(c_pip)
+    ic_rec = h.Vector()
+    ic_rec.record(soma(0.5)._ref_v)
 
     h.init()
     h.finitialize(vinit)
@@ -288,4 +277,4 @@ if __name__ == '__main__':
     tp = create_test_pulse(**kwds)
     tp.plot()
     pg.exec()
-    check_analysis(tp, soma, kwds)
+    check_analysis(tp, soma_, kwds)
