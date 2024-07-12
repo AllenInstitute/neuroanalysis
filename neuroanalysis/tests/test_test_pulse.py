@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 from neuron import h
 import pyqtgraph as pg
 
@@ -6,26 +7,30 @@ from neuroanalysis.data import TSeries, PatchClampRecording
 from neuroanalysis.test_pulse import PatchClampTestPulse
 from neuroanalysis.units import pA, mV, MOhm, pF, uF, us, ms, cm, nA, um
 
+h.load_file('stdrun.hoc')
 
-def test_ic_pulse():
-    # Just test against a simple R/C circuit attached to a pipette
-    tp_kwds = dict(soma=soma_, pamp=-100*pA, mode='ic', r_access=10*MOhm)
-    tp = create_test_pulse(**tp_kwds)
-    check_analysis(tp, soma_, tp_kwds)
 
-def test_vc_pulse():
-    # Just test against a simple R/C circuit attached to a pipette
-    tp_kwds = dict(soma=soma_, pamp=-85*mV, mode='vc', hold=-65*mV)
-    tp = create_test_pulse(**tp_kwds)
-    check_analysis(tp, soma_, tp_kwds)
+@pytest.mark.parametrize('pamp', [-100*pA, -10*pA, 10*pA])
+@pytest.mark.parametrize('r_access', [5*MOhm, 10*MOhm, 15*MOhm])
+def test_ic_pulse(pamp, r_access):
+    tp_kwds = dict(pamp=pamp, mode='ic', r_access=r_access)
+    tp, _ = create_test_pulse(**tp_kwds)
+    check_analysis(tp, _['soma'], _['vc'], tp_kwds)
+
+
+@pytest.mark.parametrize('pamp', [-100*pA, -50*pA, -10*pA])
+@pytest.mark.parametrize('r_input', [100*MOhm, 200*MOhm, 500*MOhm])
+@pytest.mark.parametrize('r_access', [5*MOhm, 10*MOhm, 15*MOhm])
+def test_vc_pulse(pamp, r_input, r_access):
+    tp_kwds = dict(pamp=pamp, mode='vc', hold=-65*mV, r_input=r_input, r_access=r_access)
+    tp, _ = create_test_pulse(**tp_kwds)
+    check_analysis(tp, _['soma'], _['vc'], tp_kwds)
 
 
 def test_insignificant_transient():
-    tp_kwds = dict(soma=soma_, pamp=-10*mV, mode='vc')
-    tp = create_test_pulse(**tp_kwds)
-    # prevent the cell from impacting the pulse
-    check_analysis(tp, soma_, tp_kwds)
-    assert False  # TODO
+    tp_kwds = dict(pamp=-10*mV, mode='vc', c_soma=1*pF, c_pip=0.1*pF, r_input=1*MOhm, r_access=5*MOhm)
+    tp, _ = create_test_pulse(**tp_kwds)
+    check_analysis(tp, _['soma'], _['vc'], tp_kwds)
 
 
 def test_with_60Hz_noise():
@@ -55,32 +60,17 @@ def set_resistance(s, r):
     s(0.5).pas.g = 1 / (r / cm**2 * surface_area(s))
 
 
-# TODO weird stuff with reuse of these; maybe make new ones each time
-soma_ = h.Section()
-soma_.insert('pas')
-soma_.cm = 1.0  # capacitance in µF/cm²
-soma_.L = soma_.diam = (500 / np.pi) ** 0.5  # µm
-
-
 def set_pip_cap(v):
-    # TODO pipette capacitance
-    cmat = h.Matrix(2, 2, 2)
+    # TODO we need to build https://www.neuron.yale.edu/phpBB/viewtopic.php?t=203
+    # mech.c = h.Matrix(1, 1, 2).from_python([[v * uF]])
+    cmat = h.Matrix(2, 2, 2).ident()
     cmat.setval(0, 1, v * uF)
     gmat = h.Matrix(2, 2, 2).ident()
     y = h.Vector(2)
     y0 = h.Vector(2)
     b = h.Vector(2)
-    # mech.c = h.Matrix(1, 1, 2).from_python([[v * uF]])  # µF
-    return h.LinearMechanism(cmat, gmat, y, y0, b)
 
-
-vc = h.SEClamp(soma_(0.5))
-vc_rec = h.Vector()
-vc_rec.record(vc._ref_i)
-
-# TODO we need to build https://www.neuron.yale.edu/phpBB/viewtopic.php?t=203
-
-h.load_file('stdrun.hoc')
+    return h.LinearMechanism(cmat, gmat, y, y0, b), cmat, gmat, y, y0, b
 
 
 def _make_ic_command(soma, amplitude, start, duration):
@@ -88,12 +78,10 @@ def _make_ic_command(soma, amplitude, start, duration):
     ic.amp = amplitude / nA
     ic.dur = duration / ms
     ic.delay = start / ms
-    print(f"IClamp: {ic.amp} nA for {ic.dur} ms at {ic.delay} ms")
     return ic
 
 
 def create_test_pulse(
-        soma=None,
         start=5*ms,
         pdur=10*ms,
         pamp=-10*pA,
@@ -106,8 +94,13 @@ def create_test_pulse(
         c_pip=5*pF,
         noise=5*pA
 ):
-    if soma is None:
-        soma = soma_
+    soma = h.Section()
+    soma.insert('pas')
+    soma.cm = 1.0  # µF/cm²
+    soma.L = soma.diam = (500 / np.pi) ** 0.5  # µm (500 µm²)
+    vc = h.SEClamp(soma(0.5))
+    vc_rec = h.Vector()
+    vc_rec.record(vc._ref_i)
     vc_rec.clear()
     settle = 50 * ms
     pulse = np.ones((int((settle + start + pdur + settle) // dt),)) * hold
@@ -129,7 +122,7 @@ def create_test_pulse(
     vc.rs = r_access / MOhm  # Rs, in MOhms
     soma.cm = c_soma / capacitance(soma)
     set_resistance(soma, r_input)
-    # nln = set_pip_cap(c_pip)
+    nln, cmat, gmat, y, y0, b = set_pip_cap(c_pip)
     ic_rec = h.Vector()
     ic_rec.record(soma(0.5)._ref_v)
 
@@ -141,21 +134,13 @@ def create_test_pulse(
 
     if mode == 'ic':
         out = ic_rec.as_numpy() * mV
-        cmd_label = 'A'
-        label = 'V'
     else:
         out = vc_rec.as_numpy() * nA
-        cmd_label = 'V'
-        label = 'A'
-
-    pg.plot(pulse, labels={'left': ('Command', cmd_label), 'bottom': ('time', 's')})
-    pg.plot(out, labels={'left': ('Response', label), 'bottom': ('time', 's')})
-    pg.exec()
 
     out = out[int(settle // dt):int((settle + start + pdur + settle) // dt)]
     pulse = pulse[int(settle // dt):int((settle + start + pdur + settle) // dt)]
 
-    return PatchClampTestPulse(
+    tp = PatchClampTestPulse(
         PatchClampRecording(
             channels={
                 'primary': TSeries(out, dt=dt),
@@ -166,29 +151,32 @@ def create_test_pulse(
             bridge_balance=0,
             lpf_cutoff=None,
             pipette_offset=0,
+            holding_current=hold if mode == 'ic' else None,
+            holding_potential=hold if mode == 'vc' else None,
         ),
     )
+    return tp, locals()  # NEURON blows up if GC deletes objects before we're done
 
 
-def expected_testpulse_values(cell, tp_kwds):
+def expected_testpulse_values(cell, vc, tp_kwds):
     values = {
         'access_resistance': vc.rs * MOhm,
         'capacitance': capacitance(cell),
         'input_resistance': resistance(cell),
     }
     if tp_kwds.get('mode', 'ic') == 'ic':
-        values['baseline_potential'] = 0  # TODO
+        # values['baseline_potential'] = 0  # TODO
         values['baseline_current'] = tp_kwds.get('hold', 0)
     else:
         values['baseline_potential'] = tp_kwds.get('hold', 0)
-        values['baseline_current'] = 0  # TODO
+        # values['baseline_current'] = 0  # TODO
 
     return values
 
 
-def check_analysis(pulse, cell, tp_kwds):
+def check_analysis(pulse, cell, vc, tp_kwds):
     measured = pulse.analysis
-    expected = expected_testpulse_values(cell, tp_kwds)
+    expected = expected_testpulse_values(cell, vc, tp_kwds)
     
     # how much error should we tolerate for each parameter?
     err_tolerance = {
@@ -217,64 +205,16 @@ def check_analysis(pulse, cell, tp_kwds):
     assert not mistakes
 
 
-def example(mode='ic', holding=0.05*nA):
-    # Step 1: Create a cell model
-    soma = h.Section(name='soma')
-
-    # Insert passive properties
-    soma.insert('pas')
-
-    # Step 2: Insert a current clamp for the holding current
-    pre_ic = _make_ic_command(soma, holding, 0, 50*ms)
-
-    # Step 3: Insert a current clamp for the test pulse
-    pulse_ic = _make_ic_command(soma, 0.1*nA, 50*ms, 1*ms)
-
-    # Step 3.5: Insert a current clamp for the holding current
-    post_ic = _make_ic_command(soma, holding, 51*ms, 50*ms)
-
-    # Step 4: Set up recording vectors
-    v = h.Vector().record(soma(0.5)._ref_v)  # Membrane potential vector
-    t = h.Vector().record(h._ref_t)  # Time vector
-    pre_i = h.Vector().record(pre_ic._ref_i)  # Holding current vector
-    post_i = h.Vector().record(post_ic._ref_i)  # Holding current vector
-    i_test = h.Vector().record(pulse_ic._ref_i)  # Test pulse current vector
-
-    # Step 5: Run the simulation
-    h.finitialize(-65)
-    h.continuerun(101)  # Run long enough to cover both holding and test pulse phases
-
-    # Step 6: Convert to NumPy arrays
-    v_numpy = np.array(v)
-    t_numpy = np.array(t)
-    pre_i_np = np.array(pre_i)
-    post_i_np = np.array(post_i)
-    i_test_numpy = np.array(i_test)
-
-    # Print or analyze the results
-    print("Time (ms):", t_numpy)
-    print("Membrane potential (mV):", v_numpy)
-    print("Holding current (nA):", pre_i_np)
-    print("Test pulse current (nA):", i_test_numpy)
-    pg.plot(t_numpy, v_numpy * mV, title='EX Membrane potential', labels={'left': ('Vm', 'V'), 'bottom': ('time', 'ms')})
-    pg.plot(t_numpy, (pre_i_np + i_test_numpy + post_i_np) * nA, title='EX Command', labels={'left': ('I', 'A'), 'bottom': ('time', 'ms')})
-    pg.exec()
-    return v_numpy, t_numpy, pre_i_np, i_test_numpy
-
-
 if __name__ == '__main__':
-    # example()
-    # v_numpy, t_numpy, i_holding_numpy, i_test_numpy = example()
-    kwds = dict(soma=soma_, pamp=100*pA, mode='ic', r_access=100*MOhm, hold=50*pA)
-    tp = create_test_pulse(**kwds)
-    tp.plot()
-    pg.exec()
-    check_analysis(tp, soma_, kwds)
+    vc_kwds = dict(pamp=-85*mV, mode='vc', hold=-65*mV, r_input=200*MOhm, r_access=15*MOhm)
+    vc_tp, vc_locals = create_test_pulse(**vc_kwds)
 
-    # print("Vm %g mV    Rm %g MOhm" % (model_cell.resting_potential()*1000, model_cell.input_resistance()/MOhm))
+    ic_kwds = dict(pamp=-100*pA, mode='ic', r_access=10*MOhm)
+    ic_tp, ic_locals = create_test_pulse(**ic_kwds)
 
-    kwds = dict(pamp=-80*mV, mode='vc', r_access=15*MOhm, hold=-65*mV)
-    tp = create_test_pulse(**kwds)
-    tp.plot()
+    ic_tp.plot()
+    vc_tp.plot()
     pg.exec()
-    check_analysis(tp, soma_, kwds)
+
+    check_analysis(vc_tp, vc_locals['soma'], vc_locals['vc'], vc_kwds)
+    check_analysis(ic_tp, ic_locals['soma'], ic_locals['vc'], ic_kwds)
