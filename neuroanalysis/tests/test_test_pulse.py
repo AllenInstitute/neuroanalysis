@@ -9,22 +9,22 @@ from neuroanalysis.units import pA, mV, MOhm, pF, uF, us, ms, cm, nA, um
 
 def test_ic_pulse():
     # Just test against a simple R/C circuit attached to a pipette
-    tp_kwds = dict(pamp=-100*pA, mode='ic', r_access=10*MOhm)
+    tp_kwds = dict(soma=soma_, pamp=-100*pA, mode='ic', r_access=10*MOhm)
     tp = create_test_pulse(**tp_kwds)
-    check_analysis(tp, soma, tp_kwds)
+    check_analysis(tp, soma_, tp_kwds)
 
 def test_vc_pulse():
     # Just test against a simple R/C circuit attached to a pipette
-    tp_kwds = dict(pamp=-85*mV, mode='vc', hold=-65*mV)
+    tp_kwds = dict(soma=soma_, pamp=-85*mV, mode='vc', hold=-65*mV)
     tp = create_test_pulse(**tp_kwds)
-    check_analysis(tp, soma, tp_kwds)
+    check_analysis(tp, soma_, tp_kwds)
 
 
 def test_insignificant_transient():
-    tp_kwds = dict(pamp=-10*mV, mode='vc')
-    tp = create_test_pulse()
+    tp_kwds = dict(soma=soma_, pamp=-10*mV, mode='vc')
+    tp = create_test_pulse(**tp_kwds)
     # prevent the cell from impacting the pulse
-    check_analysis(tp, soma, tp_kwds)
+    check_analysis(tp, soma_, tp_kwds)
     assert False  # TODO
 
 
@@ -56,40 +56,79 @@ def set_resistance(s, r):
 
 
 # TODO weird stuff with reuse of these; maybe make new ones each time
-soma = h.Section()
-soma.insert('pas')
-soma.cm = 1.0  # capacitance in µF/cm²
-soma.L = soma.diam = (500 / np.pi) ** 0.5  # µm
+soma_ = h.Section()
+soma_.insert('pas')
+soma_.cm = 1.0  # capacitance in µF/cm²
+soma_.L = soma_.diam = (500 / np.pi) ** 0.5  # µm
 
-vc = h.SEClamp(soma(0.5))
+# TODO pipette capacitance
+# cmat = h.Matrix(2, 2, 2)
+# cmat.setval(0, 1, 1)
+# gmat = h.Matrix(2, 2, 2).ident()
+# y = h.Vector(2)
+# y0 = h.Vector(2)
+# b = h.Vector(2)
+# nlm = h.LinearMechanism(cmat, gmat, y, y0, b)
+
+
+def set_pip_cap(v):
+    # mech.c = h.Matrix(1, 1, 2).from_python([[v * uF]])  # µF
+    pass
+
+
+vc = h.SEClamp(soma_(0.5))
 vc_rec = h.Vector()
 vc_rec.record(vc._ref_i)
 
 # TODO we need to build https://www.neuron.yale.edu/phpBB/viewtopic.php?t=203
-ic_rec = h.Vector()
-ic_rec.record(soma(0.5)._ref_v)
 
 h.load_file('stdrun.hoc')
 
 
-def _make_ic_command(amplitude, duration, start):
+def _make_ic_command(soma, amplitude, start, duration):
     ic = h.IClamp(soma(0.5))
     ic.amp = amplitude / nA
     ic.dur = duration / ms
     ic.delay = start / ms
+    print(f"IClamp: {ic.amp} nA for {ic.dur} ms at {ic.delay} ms")
     return ic
 
 
-def create_test_pulse(start=5*ms, pdur=10*ms, pamp=-10*pA, hold=0, mode='ic', dt=10*us, r_access=10*MOhm, r_input=100*MOhm, c_soma=25*pF, noise=5*pA):
-    ic_rec.clear()
+def create_test_pulse(
+        soma=None,
+        start=5*ms,
+        pdur=10*ms,
+        pamp=-10*pA,
+        hold=0,
+        mode='ic',
+        dt=10*us,
+        r_access=10*MOhm,
+        r_input=100*MOhm,
+        c_soma=25*pF,
+        c_pip=5*pF,
+        noise=5*pA
+):
+    if soma is None:
+        soma = soma_
+    # ic_rec.clear()
     vc_rec.clear()
     settle = 50 * ms
+    pulse = np.ones((int((settle + start + pdur + settle) // dt),)) * hold
+    pulse[int((settle + start) // dt):int((settle + start + pdur) // dt)] = pamp
 
     if mode == 'ic':
-        _make_ic_command(hold, settle + start, 0)
-        _make_ic_command(pamp, pdur, settle + start)
-        _make_ic_command(hold, settle, settle + start + pdur)
+        # ic = h.IClamp(soma(0.5))
+        # ic.dur = 1e9
+        # ic.delay = 0
+        # im = h.Vector(pulse / nA)
+        # im.play(ic._ref_amp, dt)
+        pre_ic = _make_ic_command(soma, hold, 0, settle + start)
+        pulse_ic = _make_ic_command(soma, pamp, settle + start, pdur)
+        post_ic = _make_ic_command(soma, hold, settle + start + pdur, settle)
     else:
+        # vm = h.Vector(pulse / mV)
+        # vc.dur1 = 1e9
+        # vm.play(vc._ref_amp1, dt)
         vc.dur1 = (settle + start) / ms
         vc.amp1 = hold / mV
         vc.dur2 = pdur / ms
@@ -97,10 +136,13 @@ def create_test_pulse(start=5*ms, pdur=10*ms, pamp=-10*pA, hold=0, mode='ic', dt
         vc.dur3 = settle / ms
         vc.amp3 = hold / mV
 
-    vinit = -65  # mV
+    ic_rec = h.Vector()
+    ic_rec.record(soma(0.5)._ref_v)
+    vinit = -60  # mV
     vc.rs = r_access / MOhm  # Rs, in MOhms
     soma.cm = c_soma / capacitance(soma)
     set_resistance(soma, r_input)
+    set_pip_cap(c_pip)
 
     h.init()
     h.finitialize(vinit)
@@ -114,18 +156,15 @@ def create_test_pulse(start=5*ms, pdur=10*ms, pamp=-10*pA, hold=0, mode='ic', dt
         label = 'V'
     else:
         out = vc_rec.as_numpy() * nA
-        # not recorded by NEURON, so we just fake it.
         cmd_label = 'V'
         label = 'A'
-
-    pulse = np.ones_like(out) * hold
-    pulse[int((settle + start) // dt):int((settle + start + pdur) // dt)] = pamp
-    out = out[int(settle // dt):int((settle + start + pdur + settle) // dt)]
-    pulse = pulse[int(settle // dt):int((settle + start + pdur + settle) // dt)]
 
     pg.plot(pulse, labels={'left': ('Command', cmd_label), 'bottom': ('time', 's')})
     pg.plot(out, labels={'left': ('Response', label), 'bottom': ('time', 's')})
     pg.exec()
+
+    out = out[int(settle // dt):int((settle + start + pdur + settle) // dt)]
+    pulse = pulse[int(settle // dt):int((settle + start + pdur + settle) // dt)]
 
     return PatchClampTestPulse(
         PatchClampRecording(
@@ -146,7 +185,7 @@ def expected_testpulse_values(cell, tp_kwds):
     values = {
         'access_resistance': vc.rs * MOhm,
         'capacitance': capacitance(cell),
-        'input_resistance': resistance(soma),
+        'input_resistance': resistance(cell),
     }
     if tp_kwds.get('mode', 'ic') == 'ic':
         values['baseline_potential'] = 0  # TODO
@@ -189,7 +228,7 @@ def check_analysis(pulse, cell, tp_kwds):
     assert not mistakes
 
 
-def example(mode='ic', holding=0.05):
+def example(mode='ic', holding=0.05*nA):
     # Step 1: Create a cell model
     soma = h.Section(name='soma')
 
@@ -197,22 +236,13 @@ def example(mode='ic', holding=0.05):
     soma.insert('pas')
 
     # Step 2: Insert a current clamp for the holding current
-    pre_ic = h.IClamp(soma(0.5))
-    pre_ic.delay = 0  # Start immediately
-    pre_ic.dur = 50  # Duration long enough to settle before test pulse
-    pre_ic.amp = holding  # Holding current amplitude in nA
+    pre_ic = _make_ic_command(soma, holding, 0, 50*ms)
 
     # Step 3: Insert a current clamp for the test pulse
-    pulse_ic = h.IClamp(soma(0.5))
-    pulse_ic.delay = 50  # Start after holding current has settled
-    pulse_ic.dur = 1  # Duration of the test pulse
-    pulse_ic.amp = 0.1  # Test pulse amplitude in nA
+    pulse_ic = _make_ic_command(soma, 0.1*nA, 50*ms, 1*ms)
 
     # Step 3.5: Insert a current clamp for the holding current
-    post_ic = h.IClamp(soma(0.5))
-    post_ic.delay = 51  # Start after the pulse
-    post_ic.dur = 50  # Duration long enough to settle before test pulse
-    post_ic.amp = holding  # Holding current amplitude in nA
+    post_ic = _make_ic_command(soma, holding, 51*ms, 50*ms)
 
     # Step 4: Set up recording vectors
     v = h.Vector().record(soma(0.5)._ref_v)  # Membrane potential vector
@@ -237,18 +267,20 @@ def example(mode='ic', holding=0.05):
     print("Membrane potential (mV):", v_numpy)
     print("Holding current (nA):", pre_i_np)
     print("Test pulse current (nA):", i_test_numpy)
-    pg.plot(t_numpy, v_numpy * mV, title='Membrane potential', labels={'left': ('Vm', 'V'), 'bottom': ('time', 'ms')})
-    pg.plot(t_numpy, (pre_i_np + i_test_numpy + post_i_np) * nA, title='Command', labels={'left': ('I', 'A'), 'bottom': ('time', 'ms')})
+    pg.plot(t_numpy, v_numpy * mV, title='EX Membrane potential', labels={'left': ('Vm', 'V'), 'bottom': ('time', 'ms')})
+    pg.plot(t_numpy, (pre_i_np + i_test_numpy + post_i_np) * nA, title='EX Command', labels={'left': ('I', 'A'), 'bottom': ('time', 'ms')})
+    pg.exec()
     return v_numpy, t_numpy, pre_i_np, i_test_numpy
 
 
 if __name__ == '__main__':
+    # example()
     # v_numpy, t_numpy, i_holding_numpy, i_test_numpy = example()
-    kwds = dict(pamp=100*pA, mode='ic', r_access=100*MOhm, hold=10*pA)
+    kwds = dict(soma=soma_, pamp=100*pA, mode='ic', r_access=100*MOhm, hold=50*pA)
     tp = create_test_pulse(**kwds)
     tp.plot()
     pg.exec()
-    check_analysis(tp, soma, kwds)
+    check_analysis(tp, soma_, kwds)
 
     # print("Vm %g mV    Rm %g MOhm" % (model_cell.resting_potential()*1000, model_cell.input_resistance()/MOhm))
 
