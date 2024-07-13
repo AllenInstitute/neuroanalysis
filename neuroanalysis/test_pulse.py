@@ -200,5 +200,9 @@ class PatchClampTestPulse(PatchClampRecording):
         assert self.analysis is not None
         import pyqtgraph as pg
         plt = pg.plot(labels={'left': (self.plot_title, self.plot_units), 'bottom': ('time', 's')})
-        plt.plot(self['primary'].time_values, self['primary'].data)
-        plt.plot(self.fit_trace_with_transient.time_values, self.fit_trace_with_transient.data, pen='b')
+        plt.addLegend()
+        plt.plot(self['primary'].time_values, self['primary'].data, name="raw")
+        if self.fit_trace_with_transient is not None:
+            plt.plot(self.fit_trace_with_transient.time_values, self.fit_trace_with_transient.data, pen='b', name="fit w/ trans")
+            plt.plot(self.initial_double_fit_trace.time_values, self.initial_double_fit_trace.data, pen='g', name="initial double fit")
+        plt.plot(self.main_fit_trace.time_values, self.main_fit_trace.data, pen='r', name="first fit")
