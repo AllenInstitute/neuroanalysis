@@ -15,7 +15,7 @@ h.load_file('stdrun.hoc')
 def test_ic_pulse(pamp, r_access):
     tp_kwds = dict(pamp=pamp, mode='ic', r_access=r_access)
     tp, _ = create_test_pulse(**tp_kwds)
-    check_analysis(tp, _['soma'], _['vc'], tp_kwds)
+    check_analysis(tp, _['soma'], tp_kwds)
 
 
 @pytest.mark.parametrize('pamp', [-100*pA, -50*pA, -10*pA])
@@ -24,13 +24,13 @@ def test_ic_pulse(pamp, r_access):
 def test_vc_pulse(pamp, r_input, r_access):
     tp_kwds = dict(pamp=pamp, mode='vc', hold=-65*mV, r_input=r_input, r_access=r_access)
     tp, _ = create_test_pulse(**tp_kwds)
-    check_analysis(tp, _['soma'], _['vc'], tp_kwds)
+    check_analysis(tp, _['soma'], tp_kwds)
 
 
 def test_insignificant_transient():
     tp_kwds = dict(pamp=-10*mV, mode='vc', c_soma=1*pF, c_pip=0.1*pF, r_input=1*MOhm, r_access=5*MOhm)
     tp, _ = create_test_pulse(**tp_kwds)
-    check_analysis(tp, _['soma'], _['vc'], tp_kwds)
+    check_analysis(tp, _['soma'], tp_kwds)
 
 
 def test_with_60Hz_noise():
@@ -98,19 +98,53 @@ def create_test_pulse(
     soma.insert('pas')
     soma.cm = 1.0  # µF/cm²
     soma.L = soma.diam = (500 / np.pi) ** 0.5  # µm (500 µm²)
-    vc = h.SEClamp(soma(0.5))
-    vc_rec = h.Vector()
-    vc_rec.record(vc._ref_i)
-    vc_rec.clear()
+    soma.cm = c_soma / capacitance(soma)
+    set_resistance(soma, r_input)
+    # nln, cmat, gmat, y, y0, b = set_pip_cap(c_pip)
+
     settle = 50 * ms
     pulse = np.ones((int((settle + start + pdur + settle) // dt),)) * hold
     pulse[int((settle + start) // dt):int((settle + start + pdur) // dt)] = pamp
 
+    def run():
+        vinit = -60  # mV
+
+        h.init()
+        h.finitialize(vinit)
+
+        h.dt = dt / ms
+        h.continuerun((settle + start + pdur + settle) / ms)
+
     if mode == 'ic':
+        pipette = h.Section()
+
+        # TODO resistance. none of these work.
+        # Are we a passthrough, though? That seems weird.
+        pipette.insert('pas')
+        set_resistance(pipette, r_access)
+        # pipette.Ra doesn't seem to do anything
+        pipette.Ra = 1e-6
+        # compile my own mechanism, even?!
+        sr = h.SeriesResistance(pipette(0.5))
+        sr.r = r_access * MOhm
+
+        pipette.diam = pipette.L = 1  # arbitrary dimensions
+        pipette.cm = c_pip / capacitance(pipette)
+        pipette.connect(soma(0))
+
         pre_ic = _make_ic_command(soma, hold, 0, settle + start)
         pulse_ic = _make_ic_command(soma, pamp, settle + start, pdur)
         post_ic = _make_ic_command(soma, hold, settle + start + pdur, settle)
+
+        ic_rec = h.Vector()
+        ic_rec.record(soma(0.5)._ref_v)
+
+        run()
+        out = ic_rec.as_numpy() * mV
     else:
+        vc = h.SEClamp(soma(0.5))
+        vc.rs = r_access / MOhm  # Rs, in MOhms
+
         vc.dur1 = (settle + start) / ms
         vc.amp1 = hold / mV
         vc.dur2 = pdur / ms
@@ -118,23 +152,10 @@ def create_test_pulse(
         vc.dur3 = settle / ms
         vc.amp3 = hold / mV
 
-    vinit = -60  # mV
-    vc.rs = r_access / MOhm  # Rs, in MOhms
-    soma.cm = c_soma / capacitance(soma)
-    set_resistance(soma, r_input)
-    nln, cmat, gmat, y, y0, b = set_pip_cap(c_pip)
-    ic_rec = h.Vector()
-    ic_rec.record(soma(0.5)._ref_v)
+        vc_rec = h.Vector()
+        vc_rec.record(vc._ref_i)
 
-    h.init()
-    h.finitialize(vinit)
-
-    h.dt = dt / ms
-    h.continuerun((settle + start + pdur + settle) / ms)
-
-    if mode == 'ic':
-        out = ic_rec.as_numpy() * mV
-    else:
+        run()
         out = vc_rec.as_numpy() * nA
 
     out = out[int(settle // dt):int((settle + start + pdur + settle) // dt)]
@@ -158,9 +179,9 @@ def create_test_pulse(
     return tp, locals()  # NEURON blows up if GC deletes objects before we're done
 
 
-def expected_testpulse_values(cell, vc, tp_kwds):
+def expected_testpulse_values(cell, tp_kwds):
     values = {
-        'access_resistance': vc.rs * MOhm,
+        'access_resistance': tp_kwds.get('r_access', 10*MOhm),
         'capacitance': capacitance(cell),
         'input_resistance': resistance(cell),
     }
@@ -174,9 +195,9 @@ def expected_testpulse_values(cell, vc, tp_kwds):
     return values
 
 
-def check_analysis(pulse, cell, vc, tp_kwds):
+def check_analysis(pulse, cell, tp_kwds):
     measured = pulse.analysis
-    expected = expected_testpulse_values(cell, vc, tp_kwds)
+    expected = expected_testpulse_values(cell, tp_kwds)
     
     # how much error should we tolerate for each parameter?
     err_tolerance = {
@@ -216,5 +237,5 @@ if __name__ == '__main__':
     vc_tp.plot()
     pg.exec()
 
-    check_analysis(vc_tp, vc_locals['soma'], vc_locals['vc'], vc_kwds)
-    check_analysis(ic_tp, ic_locals['soma'], ic_locals['vc'], ic_kwds)
+    check_analysis(vc_tp, vc_locals['soma'], vc_kwds)
+    check_analysis(ic_tp, ic_locals['soma'], ic_kwds)
