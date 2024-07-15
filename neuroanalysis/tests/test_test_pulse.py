@@ -5,7 +5,7 @@ import pyqtgraph as pg
 
 from neuroanalysis.data import TSeries, PatchClampRecording
 from neuroanalysis.test_pulse import PatchClampTestPulse
-from neuroanalysis.units import pA, mV, MOhm, pF, uF, us, ms, cm, nA, um
+from neuroanalysis.units import pA, mV, MOhm, pF, uF, us, ms, cm, nA, um, mm
 
 h.load_file('stdrun.hoc')
 
@@ -13,9 +13,10 @@ h.load_file('stdrun.hoc')
 @pytest.mark.parametrize('pamp', [-100*pA, -10*pA, 10*pA])
 @pytest.mark.parametrize('r_input', [100*MOhm, 200*MOhm, 500*MOhm])
 @pytest.mark.parametrize('r_access', [5*MOhm, 10*MOhm, 15*MOhm])
+@pytest.mark.parametrize('c_soma', [10*pF, 25*pF, 100*pF])
 @pytest.mark.parametrize('only', ['access_resistance', 'capacitance', 'input_resistance', 'baseline_current'])
-def test_ic_pulse(pamp, r_input, r_access, only):
-    tp_kwds = dict(pamp=pamp, mode='ic', r_access=r_access, r_input=r_input)
+def test_ic_pulse(pamp, r_input, r_access, c_soma, only):
+    tp_kwds = dict(pamp=pamp, mode='ic', r_access=r_access, r_input=r_input, c_soma=c_soma)
     tp, _ = create_test_pulse(**tp_kwds)
     check_analysis(tp, _['soma'], tp_kwds, only=[only])
 
@@ -23,9 +24,10 @@ def test_ic_pulse(pamp, r_input, r_access, only):
 @pytest.mark.parametrize('pamp', [-100*mV, -50*mV, -10*mV])
 @pytest.mark.parametrize('r_input', [100*MOhm, 200*MOhm, 500*MOhm])
 @pytest.mark.parametrize('r_access', [5*MOhm, 10*MOhm, 15*MOhm])
+@pytest.mark.parametrize('c_soma', [10*pF, 25*pF, 100*pF])
 @pytest.mark.parametrize('only', ['access_resistance', 'capacitance', 'input_resistance', 'baseline_potential'])
-def test_vc_pulse(pamp, r_input, r_access, only):
-    tp_kwds = dict(pamp=pamp, mode='vc', hold=-65*mV, r_input=r_input, r_access=r_access)
+def test_vc_pulse(pamp, r_input, r_access, c_soma, only):
+    tp_kwds = dict(pamp=pamp, mode='vc', hold=-65*mV, r_input=r_input, r_access=r_access, c_soma=c_soma)
     tp, _ = create_test_pulse(**tp_kwds)
     check_analysis(tp, _['soma'], tp_kwds, only=[only])
 
@@ -46,10 +48,13 @@ def capacitance(s):
     return (s.cm * uF / cm**2) * surface_area(s)
 
 
-def surface_area(s) -> float:
-    """Return the surface area of a soma in m²."""
-    # its units are µm * µm
-    return (s.L * um) * (s.diam * um) * np.pi
+def surface_area(section) -> float:
+    """Return the surface area of a section (truncated cone) in m²."""
+    # its units are um * um
+    a_r = section(0).diam * um / 2
+    b_r = section(1).diam * um / 2
+    length = section.L * um
+    return np.pi * (a_r + b_r) * np.sqrt((a_r - b_r)**2 + length**2)
 
 
 def resistance(s):
@@ -76,8 +81,8 @@ def set_pip_cap(v):
     return h.LinearMechanism(cmat, gmat, y, y0, b), cmat, gmat, y, y0, b
 
 
-def _make_ic_command(soma, amplitude, start, duration):
-    ic = h.IClamp(soma(0.5))
+def _make_ic_command(connection, amplitude, start, duration):
+    ic = h.IClamp(connection)
     ic.amp = amplitude / nA
     ic.dur = duration / ms
     ic.delay = start / ms
@@ -100,7 +105,7 @@ def create_test_pulse(
     soma = h.Section()
     soma.insert('pas')
     soma.cm = 1.0  # µF/cm²
-    soma.L = soma.diam = (500 / np.pi) ** 0.5  # µm (500 µm²)
+    soma.L = soma.diam = (500 / np.pi) ** 0.5  # um (500 um²)
     soma.cm = c_soma / capacitance(soma)
     set_resistance(soma, r_input)
     # nln, cmat, gmat, y, y0, b = set_pip_cap(c_pip)
@@ -119,34 +124,61 @@ def create_test_pulse(
         h.continuerun((settle + start + pdur + settle) / ms)
 
     if mode == 'ic':
-        pipette = h.Section()
+        pip_thick = h.Section()
+        pip_thick.nseg = 10
+        pipette_angle = np.deg2rad(20)
+        base_radius = 0.5 * 0.86 * mm
+        divider_radius = 0.5 * 10 * um
+        tip_radius = 0.5 * 1.0 * um
+        # tip_radius = 0.5 * 0.001 * um
+
+        length = base_radius / np.tan(pipette_angle / 2)
+
+        pip_thick(0).diam = 2 * base_radius / um
+        pip_thick(1).diam = 2 * divider_radius / um
+        pip_thick.L = length / um
+        # resistance = resistivity * length / area
+
+        # We have a truncated cone with length, base_diam, and tip_diam.
+        # electrical current flows from one end of the cone to the other.
+        # Calculate the resistivity in Ohm*m needed to achieve a total axial resistance:
+        resistivity = np.pi * base_radius * divider_radius * r_access / length
+
+        pip_thick.Ra = resistivity / cm  # Ra is in Ohm*cm
 
         # TODO resistance. none of these work.
         # Are we a passthrough, though? That seems weird.
-        pipette.insert('pas')
-        set_resistance(pipette, r_access)
+        # pipette.insert('pas')
+        # set_resistance(pipette, r_access)
         # pipette.Ra doesn't seem to do anything
-        # pipette.Ra = 1e-6
+
         # compile my own mechanism, even?!
         # sr = h.SeriesResistance(pipette(0.5))
         # sr.r = r_access * MOhm
 
-        pipette.diam = pipette.L = 1  # arbitrary dimensions
-        pipette.cm = c_pip / capacitance(pipette)
-        pipette.connect(soma(0))
+        # pipette.diam = pipette.L = 1  # arbitrary dimensions
+        pip_thick.cm = c_pip / capacitance(pip_thick) / 10
 
-        pre_ic = _make_ic_command(soma, hold, 0, settle + start)
-        pulse_ic = _make_ic_command(soma, pamp, settle + start, pdur)
-        post_ic = _make_ic_command(soma, hold, settle + start + pdur, settle)
+
+        pip_thick.connect(soma(0.5), 1)
+
+        pre_ic = _make_ic_command(pip_thick(0), hold, 0, settle + start)
+        pulse_ic = _make_ic_command(pip_thick(0), pamp, settle + start, pdur)
+        post_ic = _make_ic_command(pip_thick(0), hold, settle + start + pdur, settle)
 
         ic_rec = h.Vector()
         ic_rec.record(soma(0.5)._ref_v)
+        pip_rec1 = h.Vector()
+        pip_rec1.record(pip_thick(1)._ref_v)
+        pip_rec0 = h.Vector()
+        pip_rec0.record(pip_thick(0)._ref_v)
 
         run()
-        out = ic_rec.as_numpy() * mV
+        # out = ic_rec.as_numpy() * mV
+        out = pip_rec0.as_numpy() * mV
     else:
         vc = h.SEClamp(soma(0.5))
-        vc.rs = r_access / MOhm  # Rs, in MOhms
+        vc.rs = r_access / MOhm
 
         vc.dur1 = (settle + start) / ms
         vc.amp1 = hold / mV
@@ -163,6 +195,9 @@ def create_test_pulse(
 
     out = out[int(settle // dt):int((settle + start + pdur + settle) // dt)]
     pulse = pulse[int(settle // dt):int((settle + start + pdur + settle) // dt)]
+    # pg.plot(pulse, title=f'{mode} command')
+    # pg.plot((pip_rec1.as_numpy() * mV)[int(settle // dt):int((settle + start + pdur + settle) // dt)], title=f'{mode} pipette(1) voltage')
+    # pg.plot((pip_rec0.as_numpy() * mV)[int(settle // dt):int((settle + start + pdur + settle) // dt)], title=f'{mode} pipette(0) voltage')
 
     tp = PatchClampTestPulse(
         PatchClampRecording(
@@ -232,15 +267,15 @@ def check_analysis(pulse, cell, tp_kwds, only=None):
 
 
 if __name__ == '__main__':
-    vc_kwds = dict(pamp=-85*mV, mode='vc', hold=-65*mV, r_input=200*MOhm, r_access=15*MOhm)
-    vc_tp, vc_locals = create_test_pulse(**vc_kwds)
+    # vc_kwds = dict(pamp=-85*mV, mode='vc', hold=-65*mV, r_input=200*MOhm, r_access=15*MOhm)
+    # vc_tp, vc_locals = create_test_pulse(**vc_kwds)
+    # vc_tp.plot()
+    # check_analysis(vc_tp, vc_locals['soma'], vc_kwds)
 
-    ic_kwds = dict(pamp=-100*pA, mode='ic', r_access=10*MOhm)
+    ic_kwds = dict(pamp=-100*pA, mode='ic', r_input=200*MOhm, r_access=10*MOhm, pdur=50*ms, c_pip=5*pF, c_soma=100*pF)
     ic_tp, ic_locals = create_test_pulse(**ic_kwds)
 
     ic_tp.plot()
-    vc_tp.plot()
     pg.exec()
 
-    check_analysis(vc_tp, vc_locals['soma'], vc_kwds)
     check_analysis(ic_tp, ic_locals['soma'], ic_kwds)
