@@ -42,30 +42,34 @@ def test_with_60Hz_noise():
     assert False  # TODO
 
 
-def capacitance(s):
+def capacitance(section):
     """Return the capacitance of a soma in F."""
     # its units are (µF / cm²)
-    return (s.cm * uF / cm**2) * surface_area(s)
+    return (section.cm * uF / cm ** 2) * section_surface(section)
 
 
-def surface_area(section) -> float:
+def trunc_cone_surface_area(base_radius, tip_radius, length):
+    return np.pi * (base_radius + tip_radius) * np.sqrt((base_radius - tip_radius)**2 + length**2)
+
+
+def section_surface(section) -> float:
     """Return the surface area of a section (truncated cone) in m²."""
     # its units are um * um
     a_r = section(0).diam * um / 2
     b_r = section(1).diam * um / 2
     length = section.L * um
-    return np.pi * (a_r + b_r) * np.sqrt((a_r - b_r)**2 + length**2)
+    return trunc_cone_surface_area(a_r, b_r, length)
 
 
 def resistance(s):
     """Return the resistance of a soma in Ohms."""
     # its units are S/cm²
-    return 1 / ((s(0.5).pas.g / cm**2) * surface_area(s))
+    return 1 / ((s(0.5).pas.g / cm**2) * section_surface(s))
 
 
 def set_resistance(s, r):
     """Set the resistance of a soma in Ohms."""
-    s(0.5).pas.g = 1 / (r / cm**2 * surface_area(s))
+    s(0.5).pas.g = 1 / (r / cm ** 2 * section_surface(s))
 
 
 def set_pip_cap(v):
@@ -106,11 +110,11 @@ def create_test_pulse(
     soma.insert('pas')
     soma.cm = 1.0  # µF/cm²
     soma.L = soma.diam = (500 / np.pi) ** 0.5  # um (500 um²)
-    soma.cm = c_soma / capacitance(soma)
+    soma.cm = soma.cm * c_soma / capacitance(soma)
     set_resistance(soma, r_input)
     # nln, cmat, gmat, y, y0, b = set_pip_cap(c_pip)
 
-    settle = 50 * ms
+    settle = 80 * ms
     pulse = np.ones((int((settle + start + pdur + settle) // dt),)) * hold
     pulse[int((settle + start) // dt):int((settle + start + pdur) // dt)] = pamp
 
@@ -125,7 +129,7 @@ def create_test_pulse(
 
     if mode == 'ic':
         pip_thick = h.Section()
-        pip_thick.nseg = 10
+        pip_thick.nseg = 25
         pipette_angle = np.deg2rad(20)
         base_radius = 0.5 * 0.86 * mm
         divider_radius = 0.5 * 10 * um
@@ -142,8 +146,7 @@ def create_test_pulse(
         # We have a truncated cone with length, base_diam, and tip_diam.
         # electrical current flows from one end of the cone to the other.
         # Calculate the resistivity in Ohm*m needed to achieve a total axial resistance:
-        resistivity = np.pi * base_radius * divider_radius * r_access / length
-
+        resistivity = np.pi * base_radius * tip_radius * r_access / length
         pip_thick.Ra = resistivity / cm  # Ra is in Ohm*cm
 
         # TODO resistance. none of these work.
@@ -157,10 +160,21 @@ def create_test_pulse(
         # sr.r = r_access * MOhm
 
         # pipette.diam = pipette.L = 1  # arbitrary dimensions
-        pip_thick.cm = c_pip / capacitance(pip_thick) / 10
 
+        pip_cap_per_area = c_pip / trunc_cone_surface_area(base_radius, tip_radius, length)
+        pip_thick.cm = pip_cap_per_area * cm**2 / uF
 
-        pip_thick.connect(soma(0.5), 1)
+        pip_thin = h.Section()
+        pip_thin.nseg = 1000
+        pip_thin(0).diam = 2 * divider_radius / um
+        pip_thin(1).diam = 2 * tip_radius / um
+        pip_thin.Ra = resistivity / cm  # Ra is in Ohm*cm
+        pip_thin.cm = pip_cap_per_area * cm**2 / uF
+
+        length = base_radius / np.tan(pipette_angle / 2)
+        pip_thin.L = length / um
+        pip_thick.connect(pip_thin(0), 1)
+        pip_thin.connect(soma(0.5), 1)
 
         pre_ic = _make_ic_command(pip_thick(0), hold, 0, settle + start)
         pulse_ic = _make_ic_command(pip_thick(0), pamp, settle + start, pdur)
@@ -256,10 +270,11 @@ def check_analysis(pulse, cell, tp_kwds, only=None):
         elif v2 is None:
             print(f"Expected {v1} for {k}, measured None")
             continue
-        if v2 == 0:
+        if v1 == 0:
             err = abs(v1 - v2)
         else:
-            err = abs((v1 - v2) / v2)
+            err = abs((v1 - v2) / v1)
+        print(f"Expected {v1:g} for {k}, got {v2:g} (err {err:g})" if err > err_tolerance[k] else f"Expected {v1:g} for {k}, got {v2:g}")
         if err > err_tolerance[k]:
             print(f"Expected {v1:g} for {k}, got {v2:g} (err {err:g} > {err_tolerance[k]:g})")
             mistakes = True
@@ -272,7 +287,7 @@ if __name__ == '__main__':
     # vc_tp.plot()
     # check_analysis(vc_tp, vc_locals['soma'], vc_kwds)
 
-    ic_kwds = dict(pamp=-100*pA, mode='ic', r_input=200*MOhm, r_access=10*MOhm, pdur=50*ms, c_pip=5*pF, c_soma=100*pF)
+    ic_kwds = dict(pamp=-100*pA, mode='ic', r_input=200*MOhm, r_access=10*MOhm, pdur=50*ms, c_pip=1*pF, c_soma=100*pF)
     ic_tp, ic_locals = create_test_pulse(**ic_kwds)
 
     ic_tp.plot()
