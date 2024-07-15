@@ -11,20 +11,23 @@ h.load_file('stdrun.hoc')
 
 
 @pytest.mark.parametrize('pamp', [-100*pA, -10*pA, 10*pA])
-@pytest.mark.parametrize('r_access', [5*MOhm, 10*MOhm, 15*MOhm])
-def test_ic_pulse(pamp, r_access):
-    tp_kwds = dict(pamp=pamp, mode='ic', r_access=r_access)
-    tp, _ = create_test_pulse(**tp_kwds)
-    check_analysis(tp, _['soma'], tp_kwds)
-
-
-@pytest.mark.parametrize('pamp', [-100*pA, -50*pA, -10*pA])
 @pytest.mark.parametrize('r_input', [100*MOhm, 200*MOhm, 500*MOhm])
 @pytest.mark.parametrize('r_access', [5*MOhm, 10*MOhm, 15*MOhm])
-def test_vc_pulse(pamp, r_input, r_access):
+@pytest.mark.parametrize('only', ['access_resistance', 'capacitance', 'input_resistance', 'baseline_current'])
+def test_ic_pulse(pamp, r_input, r_access, only):
+    tp_kwds = dict(pamp=pamp, mode='ic', r_access=r_access, r_input=r_input)
+    tp, _ = create_test_pulse(**tp_kwds)
+    check_analysis(tp, _['soma'], tp_kwds, only=[only])
+
+
+@pytest.mark.parametrize('pamp', [-100*mV, -50*mV, -10*mV])
+@pytest.mark.parametrize('r_input', [100*MOhm, 200*MOhm, 500*MOhm])
+@pytest.mark.parametrize('r_access', [5*MOhm, 10*MOhm, 15*MOhm])
+@pytest.mark.parametrize('only', ['access_resistance', 'capacitance', 'input_resistance', 'baseline_potential'])
+def test_vc_pulse(pamp, r_input, r_access, only):
     tp_kwds = dict(pamp=pamp, mode='vc', hold=-65*mV, r_input=r_input, r_access=r_access)
     tp, _ = create_test_pulse(**tp_kwds)
-    check_analysis(tp, _['soma'], tp_kwds)
+    check_analysis(tp, _['soma'], tp_kwds, only=[only])
 
 
 def test_insignificant_transient():
@@ -123,10 +126,10 @@ def create_test_pulse(
         pipette.insert('pas')
         set_resistance(pipette, r_access)
         # pipette.Ra doesn't seem to do anything
-        pipette.Ra = 1e-6
+        # pipette.Ra = 1e-6
         # compile my own mechanism, even?!
-        sr = h.SeriesResistance(pipette(0.5))
-        sr.r = r_access * MOhm
+        # sr = h.SeriesResistance(pipette(0.5))
+        # sr.r = r_access * MOhm
 
         pipette.diam = pipette.L = 1  # arbitrary dimensions
         pipette.cm = c_pip / capacitance(pipette)
@@ -195,7 +198,7 @@ def expected_testpulse_values(cell, tp_kwds):
     return values
 
 
-def check_analysis(pulse, cell, tp_kwds):
+def check_analysis(pulse, cell, tp_kwds, only=None):
     measured = pulse.analysis
     expected = expected_testpulse_values(cell, tp_kwds)
     
@@ -208,6 +211,8 @@ def check_analysis(pulse, cell, tp_kwds):
         'capacitance': 0.3,
     }
     mistakes = False
+    if only:
+        expected = {k: v for k, v in expected.items() if k in only}
     for k, v1 in expected.items():
         v2 = measured[k]
         if v1 is None:
