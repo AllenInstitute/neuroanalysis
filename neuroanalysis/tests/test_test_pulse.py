@@ -114,9 +114,61 @@ def create_test_pulse(
     set_resistance(soma, r_input)
     # nln, cmat, gmat, y, y0, b = set_pip_cap(c_pip)
 
-    settle = 200 * ms
+    settle = 200 * ms if mode == 'ic' else 50 * ms
     pulse = np.ones((int((settle + start + pdur + settle) // dt),)) * hold
     pulse[int((settle + start) // dt):int((settle + start + pdur) // dt)] = pamp
+
+    pipette_halfangle = np.deg2rad(20 / 2)
+    base_radius = 0.5 * 0.86 * mm
+    tip_radius = 0.5 * 1.0 * um
+    length = base_radius / np.tan(pipette_halfangle)
+
+    resistivity = np.pi * base_radius * tip_radius * r_access / length
+
+    n_pip_sections = 20
+    pip_sections = []
+
+    # make a series of connected sections to approximate a truncated conic conductor.
+    # sections will have progressively smaller radius. section lengths are chosen
+    # such that all sections have equal resistance
+    axial_resistance_per_section = r_access / n_pip_sections
+    next_radius = base_radius
+    for i in range(n_pip_sections):
+        r = next_radius
+
+        # solve for length of truncated cone with specified resistance
+        # R = ρ * l / (pi * base_r * tip_r)
+        # l = (pi * base_r * tip_r) * R / ρ
+        # tip_r = base_r - l * tan(halfangle)
+        # l = (pi * base_r * (base_r - l * tan(halfangle))) * R / ρ
+        # l * ρ / (pi * base_r * R) = base_r - l * tan(halfangle)
+        # l * ρ / (pi * base_r * R) + l * tan(halfangle) = base_r
+        # l * (ρ / (pi * base_r * R) + tan(halfangle)) = base_r
+        # l = base_r / (ρ / (pi * base_r * R) + tan(halfangle))
+        l = r / (resistivity / (np.pi * r * axial_resistance_per_section) + np.tan(pipette_halfangle))
+
+        # now choose an effective cylinder radius that gives the same resistance
+        # R = ρ * l / A
+        # A = ρ * l / R  = pi * r^2
+        # r = sqrt((ρ * l) / (pi * R))
+        cyl_r = np.sqrt((resistivity * l) / (np.pi * axial_resistance_per_section))
+
+        sec = h.Section()
+        sec.nseg = 1
+        sec.L = l / um
+        sec.diam = 2 * cyl_r / um
+        sec.Ra = resistivity / cm
+        if i > 0:
+            pip_sections[-1].connect(sec(0), 1)
+        pip_sections.append(sec)
+        next_radius -= l * np.tan(pipette_halfangle)
+
+    pip_sections[-1].connect(soma(0.5), 1)
+
+    total_surface_area = np.sum([section_surface(sec) for sec in pip_sections])
+    pip_cap_per_area = c_pip / total_surface_area
+    for sec in pip_sections:
+        sec.cm = pip_cap_per_area * cm ** 2 / uF
 
     def run():
         vinit = -60  # mV
@@ -128,78 +180,18 @@ def create_test_pulse(
         h.continuerun((settle + start + pdur + settle) / ms)
 
     if mode == 'ic':
-        pipette_halfangle = np.deg2rad(20 / 2)
-        base_radius = 0.5 * 0.86 * mm
-        tip_radius = 0.5 * 1.0 * um
-        length = base_radius / np.tan(pipette_halfangle)
-
-        resistivity = np.pi * base_radius * tip_radius * r_access / length
-
-        n_pip_sections = 20
-        pip_sections = []
-
-        # make a series of connected sections to approximate a truncated conic conductor.
-        # sections will have progressively smaller radius. section lengths are chosen
-        # such that all sections have equal resistance
-        axial_resistance_per_section = r_access / n_pip_sections
-        next_radius = base_radius
-        for i in range(n_pip_sections):
-            r = next_radius
-
-            # solve for length of truncated cone with specified resistance
-            # R = ρ * l / (pi * base_r * tip_r)
-            # l = (pi * base_r * tip_r) * R / ρ
-            # tip_r = base_r - l * tan(halfangle)
-            # l = (pi * base_r * (base_r - l * tan(halfangle))) * R / ρ
-            # l * ρ / (pi * base_r * R) = base_r - l * tan(halfangle)
-            # l * ρ / (pi * base_r * R) + l * tan(halfangle) = base_r
-            # l * (ρ / (pi * base_r * R) + tan(halfangle)) = base_r
-            # l = base_r / (ρ / (pi * base_r * R) + tan(halfangle))
-            l = r / (resistivity / (np.pi * r * axial_resistance_per_section) + np.tan(pipette_halfangle))
-
-            # now choose an effective cylinder radius that gives the same resistance
-            # R = ρ * l / A
-            # A = ρ * l / R  = pi * r^2
-            # r = sqrt((ρ * l) / (pi * R))
-            cyl_r = np.sqrt((resistivity * l) / (np.pi * axial_resistance_per_section))
-
-            # print(f"section {i}: r={cyl_r/um:.2f}um, l={l/um:.2f}um")
-
-            # l = axial_resistance_per_section / (resistivity * cross_sectional_area)
-            sec = h.Section()
-            sec.nseg = 1
-            sec.L = l / um
-            sec.diam = 2 * cyl_r / um
-            sec.Ra = resistivity / cm
-            if i > 0:
-                pip_sections[-1].connect(sec(0), 1)
-            pip_sections.append(sec)
-            next_radius -= l * np.tan(pipette_halfangle)
-
-        pip_sections[-1].connect(soma(0.5), 1)
-
-        total_surface_area = np.sum([section_surface(sec) for sec in pip_sections])
-        pip_cap_per_area = c_pip / total_surface_area
-        for sec in pip_sections:
-            sec.cm = pip_cap_per_area * cm**2 / uF
-
         pre_ic = _make_ic_command(pip_sections[0](0), hold, 0, settle + start)
         pulse_ic = _make_ic_command(pip_sections[0](0), pamp, settle + start, pdur)
         post_ic = _make_ic_command(pip_sections[0](0), hold, settle + start + pdur, settle)
 
-        # ic_rec = h.Vector()
-        # ic_rec.record(soma(0.5)._ref_v)
-        # pip_rec1 = h.Vector()
-        # pip_rec1.record(pip_thick(1)._ref_v)
         pip_rec0 = h.Vector()
         pip_rec0.record(pip_sections[0](0)._ref_v)
 
         run()
-        # out = ic_rec.as_numpy() * mV
         out = pip_rec0.as_numpy() * mV
     else:
-        vc = h.SEClamp(soma(0.5))
-        vc.rs = r_access / MOhm
+        vc = h.SEClamp(pip_sections[0](0))
+        vc.rs = 0.01 / MOhm  # just get out of the way of our segmented pipette
 
         vc.dur1 = (settle + start) / ms
         vc.amp1 = hold / mV
@@ -289,15 +281,15 @@ def check_analysis(pulse, cell, tp_kwds, only=None):
 
 
 if __name__ == '__main__':
-    # vc_kwds = dict(pamp=-85*mV, mode='vc', hold=-65*mV, r_input=200*MOhm, r_access=15*MOhm)
-    # vc_tp, vc_locals = create_test_pulse(**vc_kwds)
-    # vc_tp.plot()
-    # check_analysis(vc_tp, vc_locals['soma'], vc_kwds)
+    vc_kwds = dict(pamp=-85*mV, mode='vc', hold=-65*mV, r_input=200*MOhm, r_access=50*MOhm, c_pip=1*pF, c_soma=100*pF)
+    vc_tp, vc_locals = create_test_pulse(**vc_kwds)
+    vc_tp.plot()
 
-    ic_kwds = dict(pamp=-100*pA, mode='ic', r_input=200*MOhm, r_access=10*MOhm, pdur=50*ms, c_pip=1*pF, c_soma=100*pF)
-    ic_tp, ic_locals = create_test_pulse(**ic_kwds)
+    # ic_kwds = dict(pamp=-100*pA, mode='ic', r_input=200*MOhm, r_access=10*MOhm, pdur=50*ms, c_pip=1*pF, c_soma=100*pF)
+    # ic_tp, ic_locals = create_test_pulse(**ic_kwds)
+    # ic_tp.plot()
 
-    ic_tp.plot()
     pg.exec()
 
-    check_analysis(ic_tp, ic_locals['soma'], ic_kwds)
+    # check_analysis(ic_tp, ic_locals['soma'], ic_kwds)
+    check_analysis(vc_tp, vc_locals['soma'], vc_kwds)
