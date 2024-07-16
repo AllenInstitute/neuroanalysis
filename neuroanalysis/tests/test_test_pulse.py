@@ -102,7 +102,7 @@ def create_test_pulse(
         dt=10*us,
         r_access=10*MOhm,
         r_input=100*MOhm,
-        c_soma=25*pF,
+        c_soma=30*pF,
         c_pip=5*pF,
         noise=5*pA
 ):
@@ -114,7 +114,7 @@ def create_test_pulse(
     set_resistance(soma, r_input)
     # nln, cmat, gmat, y, y0, b = set_pip_cap(c_pip)
 
-    settle = 80 * ms
+    settle = 200 * ms
     pulse = np.ones((int((settle + start + pdur + settle) // dt),)) * hold
     pulse[int((settle + start) // dt):int((settle + start + pdur) // dt)] = pamp
 
@@ -128,64 +128,71 @@ def create_test_pulse(
         h.continuerun((settle + start + pdur + settle) / ms)
 
     if mode == 'ic':
-        pip_thick = h.Section()
-        pip_thick.nseg = 25
-        pipette_angle = np.deg2rad(20)
+        pipette_halfangle = np.deg2rad(20 / 2)
         base_radius = 0.5 * 0.86 * mm
-        divider_radius = 0.5 * 10 * um
         tip_radius = 0.5 * 1.0 * um
-        # tip_radius = 0.5 * 0.001 * um
+        length = base_radius / np.tan(pipette_halfangle)
 
-        length = base_radius / np.tan(pipette_angle / 2)
-
-        pip_thick(0).diam = 2 * base_radius / um
-        pip_thick(1).diam = 2 * divider_radius / um
-        pip_thick.L = length / um
-        # resistance = resistivity * length / area
-
-        # We have a truncated cone with length, base_diam, and tip_diam.
-        # electrical current flows from one end of the cone to the other.
-        # Calculate the resistivity in Ohm*m needed to achieve a total axial resistance:
         resistivity = np.pi * base_radius * tip_radius * r_access / length
-        pip_thick.Ra = resistivity / cm  # Ra is in Ohm*cm
 
-        # TODO resistance. none of these work.
-        # Are we a passthrough, though? That seems weird.
-        # pipette.insert('pas')
-        # set_resistance(pipette, r_access)
-        # pipette.Ra doesn't seem to do anything
+        n_pip_sections = 20
+        pip_sections = []
 
-        # compile my own mechanism, even?!
-        # sr = h.SeriesResistance(pipette(0.5))
-        # sr.r = r_access * MOhm
+        # make a series of connected sections to approximate a truncated conic conductor.
+        # sections will have progressively smaller radius. section lengths are chosen
+        # such that all sections have equal resistance
+        axial_resistance_per_section = r_access / n_pip_sections
+        next_radius = base_radius
+        for i in range(n_pip_sections):
+            r = next_radius
 
-        # pipette.diam = pipette.L = 1  # arbitrary dimensions
+            # solve for length of truncated cone with specified resistance
+            # R = ρ * l / (pi * base_r * tip_r)
+            # l = (pi * base_r * tip_r) * R / ρ
+            # tip_r = base_r - l * tan(halfangle)
+            # l = (pi * base_r * (base_r - l * tan(halfangle))) * R / ρ
+            # l * ρ / (pi * base_r * R) = base_r - l * tan(halfangle)
+            # l * ρ / (pi * base_r * R) + l * tan(halfangle) = base_r
+            # l * (ρ / (pi * base_r * R) + tan(halfangle)) = base_r
+            # l = base_r / (ρ / (pi * base_r * R) + tan(halfangle))
+            l = r / (resistivity / (np.pi * r * axial_resistance_per_section) + np.tan(pipette_halfangle))
 
-        pip_cap_per_area = c_pip / trunc_cone_surface_area(base_radius, tip_radius, length)
-        pip_thick.cm = pip_cap_per_area * cm**2 / uF
+            # now choose an effective cylinder radius that gives the same resistance
+            # R = ρ * l / A
+            # A = ρ * l / R  = pi * r^2
+            # r = sqrt((ρ * l) / (pi * R))
+            cyl_r = np.sqrt((resistivity * l) / (np.pi * axial_resistance_per_section))
 
-        pip_thin = h.Section()
-        pip_thin.nseg = 1000
-        pip_thin(0).diam = 2 * divider_radius / um
-        pip_thin(1).diam = 2 * tip_radius / um
-        pip_thin.Ra = resistivity / cm  # Ra is in Ohm*cm
-        pip_thin.cm = pip_cap_per_area * cm**2 / uF
+            # print(f"section {i}: r={cyl_r/um:.2f}um, l={l/um:.2f}um")
 
-        length = base_radius / np.tan(pipette_angle / 2)
-        pip_thin.L = length / um
-        pip_thick.connect(pip_thin(0), 1)
-        pip_thin.connect(soma(0.5), 1)
+            # l = axial_resistance_per_section / (resistivity * cross_sectional_area)
+            sec = h.Section()
+            sec.nseg = 1
+            sec.L = l / um
+            sec.diam = 2 * cyl_r / um
+            sec.Ra = resistivity / cm
+            if i > 0:
+                pip_sections[-1].connect(sec(0), 1)
+            pip_sections.append(sec)
+            next_radius -= l * np.tan(pipette_halfangle)
 
-        pre_ic = _make_ic_command(pip_thick(0), hold, 0, settle + start)
-        pulse_ic = _make_ic_command(pip_thick(0), pamp, settle + start, pdur)
-        post_ic = _make_ic_command(pip_thick(0), hold, settle + start + pdur, settle)
+        pip_sections[-1].connect(soma(0.5), 1)
 
-        ic_rec = h.Vector()
-        ic_rec.record(soma(0.5)._ref_v)
-        pip_rec1 = h.Vector()
-        pip_rec1.record(pip_thick(1)._ref_v)
+        total_surface_area = np.sum([section_surface(sec) for sec in pip_sections])
+        pip_cap_per_area = c_pip / total_surface_area
+        for sec in pip_sections:
+            sec.cm = pip_cap_per_area * cm**2 / uF
+
+        pre_ic = _make_ic_command(pip_sections[0](0), hold, 0, settle + start)
+        pulse_ic = _make_ic_command(pip_sections[0](0), pamp, settle + start, pdur)
+        post_ic = _make_ic_command(pip_sections[0](0), hold, settle + start + pdur, settle)
+
+        # ic_rec = h.Vector()
+        # ic_rec.record(soma(0.5)._ref_v)
+        # pip_rec1 = h.Vector()
+        # pip_rec1.record(pip_thick(1)._ref_v)
         pip_rec0 = h.Vector()
-        pip_rec0.record(pip_thick(0)._ref_v)
+        pip_rec0.record(pip_sections[0](0)._ref_v)
 
         run()
         # out = ic_rec.as_numpy() * mV
