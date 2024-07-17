@@ -33,11 +33,11 @@ class PatchClampTestPulse(PatchClampRecording):
             channels={'primary': pri, 'command': cmd},
             stimulus=pulse,
             clamp_mode=rec.clamp_mode,
-            holding_potential=rec._meta['holding_potential'],
-            holding_current=rec._meta['holding_current'],
-            bridge_balance=rec._meta['bridge_balance'],
-            lpf_cutoff=rec._meta['lpf_cutoff'],
-            pipette_offset=rec._meta['pipette_offset'],
+            holding_potential=rec.meta['holding_potential'],
+            holding_current=rec.meta['holding_current'],
+            bridge_balance=rec.meta['bridge_balance'],
+            lpf_cutoff=rec.meta['lpf_cutoff'],
+            pipette_offset=rec.meta['pipette_offset'],
         )
         self._analysis = None
         # expose these for display and debugging
@@ -206,3 +206,4 @@ class PatchClampTestPulse(PatchClampRecording):
             plt.plot(self.fit_trace_with_transient.time_values, self.fit_trace_with_transient.data, pen='b', name="fit w/ trans")
             plt.plot(self.initial_double_fit_trace.time_values, self.initial_double_fit_trace.data, pen='g', name="initial double fit")
         plt.plot(self.main_fit_trace.time_values, self.main_fit_trace.data, pen='r', name="first fit")
+        return plt

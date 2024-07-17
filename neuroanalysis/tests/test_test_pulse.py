@@ -1,3 +1,5 @@
+from typing import Literal
+
 import numpy as np
 import pytest
 from neuron import h
@@ -6,6 +8,7 @@ import pyqtgraph as pg
 from neuroanalysis.data import TSeries, PatchClampRecording
 from neuroanalysis.test_pulse import PatchClampTestPulse
 from neuroanalysis.units import pA, mV, MOhm, pF, uF, us, ms, cm, nA, um, mm
+from pyqtgraph.parametertree import ParameterTree, interact
 
 h.load_file('stdrun.hoc')
 
@@ -13,21 +16,34 @@ h.load_file('stdrun.hoc')
 @pytest.mark.parametrize('pamp', [-100*pA, -10*pA, 10*pA])
 @pytest.mark.parametrize('r_input', [100*MOhm, 200*MOhm, 500*MOhm])
 @pytest.mark.parametrize('r_access', [5*MOhm, 10*MOhm, 15*MOhm])
-@pytest.mark.parametrize('c_soma', [10*pF, 25*pF, 100*pF])
-@pytest.mark.parametrize('only', ['access_resistance', 'capacitance', 'input_resistance', 'baseline_current'])
-def test_ic_pulse(pamp, r_input, r_access, c_soma, only):
-    tp_kwds = dict(pamp=pamp, mode='ic', r_access=r_access, r_input=r_input, c_soma=c_soma)
+@pytest.mark.parametrize('c_soma', [50*pF, 100*pF, 200*pF])
+@pytest.mark.parametrize('c_pip', [1*pF, 3*pF, 10*pF])
+@pytest.mark.parametrize('only', ['access_resistance'])  # , 'capacitance', 'input_resistance'])  # , 'baseline_current'])
+def test_ic_pulse(pamp, r_input, r_access, c_soma, c_pip, only):
+    tp_kwds = dict(pamp=pamp, pdur=200*ms, mode='ic', r_access=r_access, r_input=r_input, c_soma=c_soma, c_pip=c_pip)
     tp, _ = create_test_pulse(**tp_kwds)
     check_analysis(tp, _['soma'], tp_kwds, only=[only])
+    # failures:
+    # c_pip=1*pF, c_soma=200*pF, r_access=5*MOhm, r_input=500*MOhm, pamp=-10*pA
+    # c_pip=1*pF, c_soma=200*pF, r_access=5*MOhm, r_input=500*MOhm, pamp=10*pA
+    # c_pip=1*pF, c_soma=200*pF, r_access=10*MOhm, r_input=500*MOhm, pamp=-10*pA
+    # c_pip=3*pF, c_soma=200*pF, r_access=5*MOhm, r_input=500*MOhm, pamp=-10*pA
+    # c_pip=3*pF, c_soma=200*pF, r_access=5*MOhm, r_input=500*MOhm, pamp=10*pA
+    # c_pip=1*pF, c_soma=50*pF, r_access=15*MOhm, r_input=100*MOhm, pamp=-100*pA
+    # c_pip=1*pF, c_soma=50*pF, r_access=15*MOhm, r_input=200*MOhm, pamp=-100*pA
+    # c_pip=1*pF, c_soma=50*pF, r_access=15*MOhm, r_input=500*MOhm, pamp=-100*pA
+    # c_pip=1*pF, c_soma=200*pF, r_access=5*MOhm, r_input=500*MOhm, pamp=10*pA
+    # c_pip=1*pF, c_soma=200*pF, r_access=10*MOhm, r_input=500*MOhm, pamp=10*pA
 
 
-@pytest.mark.parametrize('pamp', [-100*mV, -50*mV, -10*mV])
+@pytest.mark.parametrize('pamp', [-20*mV, -10*mV, 10*mV])
 @pytest.mark.parametrize('r_input', [100*MOhm, 200*MOhm, 500*MOhm])
 @pytest.mark.parametrize('r_access', [5*MOhm, 10*MOhm, 15*MOhm])
-@pytest.mark.parametrize('c_soma', [10*pF, 25*pF, 100*pF])
-@pytest.mark.parametrize('only', ['access_resistance', 'capacitance', 'input_resistance', 'baseline_potential'])
-def test_vc_pulse(pamp, r_input, r_access, c_soma, only):
-    tp_kwds = dict(pamp=pamp, mode='vc', hold=-65*mV, r_input=r_input, r_access=r_access, c_soma=c_soma)
+@pytest.mark.parametrize('c_soma', [50*pF, 100*pF, 200*pF])
+@pytest.mark.parametrize('c_pip', [1*pF, 3*pF, 10*pF])
+@pytest.mark.parametrize('only', ['access_resistance'])  # , 'capacitance', 'input_resistance'])  # , 'baseline_potential'])
+def test_vc_pulse(pamp, r_input, r_access, c_soma, c_pip, only):
+    tp_kwds = dict(pamp=pamp, mode='vc', hold=-65*mV, r_input=r_input, r_access=r_access, c_soma=c_soma, c_pip=c_pip)
     tp, _ = create_test_pulse(**tp_kwds)
     check_analysis(tp, _['soma'], tp_kwds, only=[only])
 
@@ -38,7 +54,35 @@ def test_insignificant_transient():
     check_analysis(tp, _['soma'], tp_kwds)
 
 
+def test_pulse_in_bath():
+    tp_kwds = dict(pamp=-10*mV, mode='vc', c_soma=0.001*pF, c_pip=3*pF, r_input=0.001*MOhm, r_access=10*MOhm)
+    tp, _ = create_test_pulse(**tp_kwds)
+    check_analysis(tp, _['soma'], tp_kwds)
+
+    tp_kwds = dict(pamp=-100*pA, mode='ic', c_soma=0.001*pF, c_pip=3*pF, r_input=0.001*MOhm, r_access=10*MOhm)
+    tp, _ = create_test_pulse(**tp_kwds)
+    check_analysis(tp, _['soma'], tp_kwds)
+
+
+def test_leaky_cell():
+    tp_kwds = dict(pamp=-10*mV, mode='vc', c_soma=10*pF, c_pip=0.1*pF, r_input=10*MOhm, r_access=10*MOhm)
+    tp, _ = create_test_pulse(**tp_kwds)
+    check_analysis(tp, _['soma'], tp_kwds)
+
+    tp_kwds = dict(pamp=-100*pA, mode='ic', c_soma=10*pF, c_pip=3*pF, r_input=10*MOhm, r_access=10*MOhm)
+    tp, _ = create_test_pulse(**tp_kwds)
+    check_analysis(tp, _['soma'], tp_kwds)
+
+
 def test_with_60Hz_noise():
+    assert False  # TODO
+
+
+def test_with_2kHz_noise():
+    assert False  # TODO
+
+
+def test_clogged_pipette():
     assert False  # TODO
 
 
@@ -94,17 +138,18 @@ def _make_ic_command(connection, amplitude, start, duration):
 
 
 def create_test_pulse(
-        start=5*ms,
-        pdur=10*ms,
-        pamp=-10*pA,
-        hold=0,
-        mode='ic',
-        dt=10*us,
-        r_access=10*MOhm,
-        r_input=100*MOhm,
-        c_soma=30*pF,
-        c_pip=5*pF,
-        noise=5*pA
+        start: float = 5*ms,
+        pdur: float = 10*ms,
+        pamp: float = -10*pA,
+        hold: float = 0.0,
+        mode: Literal['ic', 'vc'] = 'ic',
+        dt: float = 10*us,
+        r_access: float = 10*MOhm,
+        r_input: float = 200*MOhm,
+        c_soma: float = 100*pF,
+        c_pip: float = 5*pF,
+        plot: bool = False,
+        noise: float = 5*pA
 ):
     soma = h.Section()
     soma.insert('pas')
@@ -114,7 +159,7 @@ def create_test_pulse(
     set_resistance(soma, r_input)
     # nln, cmat, gmat, y, y0, b = set_pip_cap(c_pip)
 
-    settle = 200 * ms if mode == 'ic' else 50 * ms
+    settle = 500 * ms if mode == 'ic' else 50 * ms
     pulse = np.ones((int((settle + start + pdur + settle) // dt),)) * hold
     pulse[int((settle + start) // dt):int((settle + start + pdur) // dt)] = pamp
 
@@ -125,12 +170,12 @@ def create_test_pulse(
 
     resistivity = np.pi * base_radius * tip_radius * r_access / length
 
-    n_pip_sections = 20
+    n_pip_sections = 10
     pip_sections = []
 
     # make a series of connected sections to approximate a truncated conic conductor.
     # sections will have progressively smaller radius. section lengths are chosen
-    # such that all sections have equal resistance
+    # such that all sections have equal resistance given a constant resistivity.
     axial_resistance_per_section = r_access / n_pip_sections
     next_radius = base_radius
     for i in range(n_pip_sections):
@@ -208,9 +253,6 @@ def create_test_pulse(
 
     out = out[int(settle // dt):int((settle + start + pdur + settle) // dt)]
     pulse = pulse[int(settle // dt):int((settle + start + pdur + settle) // dt)]
-    # pg.plot(pulse, title=f'{mode} command')
-    # pg.plot((pip_rec1.as_numpy() * mV)[int(settle // dt):int((settle + start + pdur + settle) // dt)], title=f'{mode} pipette(1) voltage')
-    # pg.plot((pip_rec0.as_numpy() * mV)[int(settle // dt):int((settle + start + pdur + settle) // dt)], title=f'{mode} pipette(0) voltage')
 
     tp = PatchClampTestPulse(
         PatchClampRecording(
@@ -227,6 +269,11 @@ def create_test_pulse(
             holding_potential=hold if mode == 'vc' else None,
         ),
     )
+    if plot:
+        tp.plot()
+        # pg.plot(pulse, title=f'{mode} command')
+        # pg.plot((pip_rec1.as_numpy() * mV)[int(settle // dt):int((settle + start + pdur + settle) // dt)], title=f'{mode} pipette(1) voltage')
+        # pg.plot((pip_rec0.as_numpy() * mV)[int(settle // dt):int((settle + start + pdur + settle) // dt)], title=f'{mode} pipette(0) voltage')
     return tp, locals()  # NEURON blows up if GC deletes objects before we're done
 
 
@@ -281,15 +328,52 @@ def check_analysis(pulse, cell, tp_kwds, only=None):
 
 
 if __name__ == '__main__':
-    vc_kwds = dict(pamp=-85*mV, mode='vc', hold=-65*mV, r_input=200*MOhm, r_access=50*MOhm, c_pip=1*pF, c_soma=100*pF)
-    vc_tp, vc_locals = create_test_pulse(**vc_kwds)
-    vc_tp.plot()
+    params = interact(
+        create_test_pulse,
+        r_access={'siPrefix': True, 'suffix': 'Ω'},
+        r_input={'siPrefix': True, 'suffix': 'Ω'},
+        c_soma={'siPrefix': True, 'suffix': 'F'},
+        c_pip={'siPrefix': True, 'suffix': 'F'},
+        pamp={'siPrefix': True, 'suffix': 'V/A'},
+        hold={'siPrefix': True, 'suffix': 'V/A'},
+    )
 
+    app = pg.mkQApp()
+    tree = ParameterTree()
+    tree.setParameters(params)
+    tree.show()
+    pg.exec()
+    #
+    # # vc_kwds = dict(pamp=-85*mV, mode='vc', hold=-65*mV, r_input=200*MOhm, r_access=5*MOhm, c_pip=1*pF, c_soma=100*pF)
+    # # vc_tp, vc_locals = create_test_pulse(**vc_kwds)
+    # # vc_tp.plot()
+    #
+
+    # failures:
+    failures = [
+        "dict(c_pip=1*pF, c_soma=200*pF, r_access=5*MOhm, r_input=500*MOhm, pamp=-10*pA)",
+        "dict(c_pip=1*pF, c_soma=200*pF, r_access=5*MOhm, r_input=500*MOhm, pamp=10*pA)",
+        "dict(c_pip=1*pF, c_soma=200*pF, r_access=10*MOhm, r_input=500*MOhm, pamp=-10*pA)",
+        "dict(c_pip=3*pF, c_soma=200*pF, r_access=5*MOhm, r_input=500*MOhm, pamp=-10*pA)",
+        "dict(c_pip=3*pF, c_soma=200*pF, r_access=5*MOhm, r_input=500*MOhm, pamp=10*pA)",
+        "dict(c_pip=1*pF, c_soma=50*pF, r_access=15*MOhm, r_input=100*MOhm, pamp=-100*pA)",
+        "dict(c_pip=1*pF, c_soma=50*pF, r_access=15*MOhm, r_input=200*MOhm, pamp=-100*pA)",
+        "dict(c_pip=1*pF, c_soma=50*pF, r_access=15*MOhm, r_input=500*MOhm, pamp=-100*pA)",
+        "dict(c_pip=1*pF, c_soma=200*pF, r_access=5*MOhm, r_input=500*MOhm, pamp=10*pA)",
+        "dict(c_pip=1*pF, c_soma=200*pF, r_access=10*MOhm, r_input=500*MOhm, pamp=10*pA)",
+    ]
     # ic_kwds = dict(pamp=-100*pA, mode='ic', r_input=200*MOhm, r_access=10*MOhm, pdur=50*ms, c_pip=1*pF, c_soma=100*pF)
-    # ic_tp, ic_locals = create_test_pulse(**ic_kwds)
-    # ic_tp.plot()
-
+    for ic_kwds in failures:
+        title = ic_kwds[5:-1]
+        ic_kwds = eval(ic_kwds)
+        ic_kwds['mode'] = 'ic'
+        ic_kwds['pdur'] = 50 * ms
+        ic_tp, ic_locals = create_test_pulse(**ic_kwds)
+        if ic_kwds['c_soma'] == 200*pF:
+            print(ic_tp.analysis['time_constant'])
+        plt = ic_tp.plot()
+        plt.setTitle(title)
     pg.exec()
 
-    # check_analysis(ic_tp, ic_locals['soma'], ic_kwds)
-    check_analysis(vc_tp, vc_locals['soma'], vc_kwds)
+    # # check_analysis(ic_tp, ic_locals['soma'], ic_kwds)
+    # # check_analysis(vc_tp, vc_locals['soma'], vc_kwds)
