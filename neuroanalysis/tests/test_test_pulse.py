@@ -18,11 +18,13 @@ h.load_file('stdrun.hoc')
 @pytest.mark.parametrize('r_access', [5*MOhm, 10*MOhm, 15*MOhm])
 @pytest.mark.parametrize('c_soma', [50*pF, 100*pF, 200*pF])
 @pytest.mark.parametrize('c_pip', [1*pF, 3*pF, 10*pF])
-@pytest.mark.parametrize('only', ['access_resistance'])  # , 'capacitance', 'input_resistance'])  # , 'baseline_current'])
-def test_ic_pulse(pamp, r_input, r_access, c_soma, c_pip, only):
+# @pytest.mark.parametrize('only', ['input_resistance', 'capacitance', 'access_resistance'])  # , 'baseline_current'])
+def test_ic_pulse(pamp, r_input, r_access, c_soma, c_pip, only=None):
     tp_kwds = dict(pamp=pamp, pdur=200*ms, mode='ic', r_access=r_access, r_input=r_input, c_soma=c_soma, c_pip=c_pip)
     tp, _ = create_test_pulse(**tp_kwds)
-    check_analysis(tp, _['soma'], tp_kwds, only=[only])
+    if only:
+        only = [only]
+    check_analysis(tp, _['soma'], tp_kwds, only=only)
 
 
 @pytest.mark.parametrize('pamp', [-85*mV, -75*mV, -55*mV])
@@ -30,11 +32,13 @@ def test_ic_pulse(pamp, r_input, r_access, c_soma, c_pip, only):
 @pytest.mark.parametrize('r_access', [5*MOhm, 10*MOhm, 15*MOhm])
 @pytest.mark.parametrize('c_soma', [50*pF, 100*pF, 200*pF])
 @pytest.mark.parametrize('c_pip', [1*pF, 3*pF, 10*pF])
-@pytest.mark.parametrize('only', ['access_resistance'])  # , 'capacitance', 'input_resistance'])  # , 'baseline_potential'])
-def test_vc_pulse(pamp, r_input, r_access, c_soma, c_pip, only):
-    tp_kwds = dict(pamp=pamp, mode='vc', hold=-65*mV, r_input=r_input, r_access=r_access, c_soma=c_soma, c_pip=c_pip)
+# @pytest.mark.parametrize('only', ['input_resistance', 'capacitance', 'access_resistance'])  # , 'baseline_potential'])
+def test_vc_pulse(pamp, r_input, r_access, c_soma, c_pip, only=None):
+    tp_kwds = dict(pamp=pamp, pdur=20*ms, mode='vc', hold=-65*mV, r_input=r_input, r_access=r_access, c_soma=c_soma, c_pip=c_pip)
     tp, _ = create_test_pulse(**tp_kwds)
-    check_analysis(tp, _['soma'], tp_kwds, only=[only])
+    if only:
+        only = [only]
+    check_analysis(tp, _['soma'], tp_kwds, only=only)
 
 
 def test_insignificant_transient():
@@ -478,7 +482,6 @@ if __name__ == '__main__':
         "dict(pamp=-0.055, mode='vc', hold=-0.065, r_input=200000000, r_access=10000000, c_soma=2e-10, c_pip=1e-12)",
         "dict(pamp=-0.075, mode='vc', hold=-0.065, r_input=200000000, r_access=10000000, c_soma=2e-10, c_pip=1e-12)",
     ]
-    # ic_kwds = dict(pamp=-100*pA, mode='ic', r_input=200*MOhm, r_access=10*MOhm, pdur=50*ms, c_pip=1*pF, c_soma=100*pF)
     for vc_kwds in failures:
         title = vc_kwds[5:-1]
         vc_kwds = eval(vc_kwds)
@@ -488,6 +491,7 @@ if __name__ == '__main__':
         print(vc_tp.analysis['time_constant'])
         plt = vc_tp.plot()
         plt.setTitle(title)
+        # check_analysis(vc_tp, vc_locals['soma'], vc_kwds)
     pg.exec()
 
     # # check_analysis(ic_tp, ic_locals['soma'], ic_kwds)
