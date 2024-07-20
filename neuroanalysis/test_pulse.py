@@ -196,7 +196,7 @@ class PatchClampTestPulse(PatchClampRecording):
 
     @property
     def plot_title(self):
-        return 'pipette potential' if self.clamp_mode == 'vc' else 'pipette current'
+        return 'pipette current' if self.clamp_mode == 'vc' else 'pipette potential'
 
     def plot(self):
         assert self.analysis is not None

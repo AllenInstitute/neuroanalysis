@@ -162,7 +162,7 @@ def create_test_pulse(
 
     resistivity = np.pi * base_radius * tip_radius * r_access / length
 
-    n_pip_sections = 10
+    n_pip_sections = 15
     pip_sections = []
 
     # make a series of connected sections to approximate a truncated conic conductor.

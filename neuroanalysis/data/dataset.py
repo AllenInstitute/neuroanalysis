@@ -588,7 +588,7 @@ class PatchClampRecording(Recording):
     def clamp_mode(self):
         """The mode of the patch clamp amplifier: 'vc', 'ic', or 'i0'.
         """
-        return self._meta['clamp_mode']
+        return self._meta['clamp_mode'].lower()
 
     @property
     def patch_mode(self):
