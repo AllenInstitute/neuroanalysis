@@ -1,5 +1,7 @@
 import numpy as np
 
+import pyqtgraph as pg
+
 from .data import PatchClampRecording, TSeries
 from .fitting.exp import exp_fit, fit_double_exp_decay
 from .stimuli import find_square_pulses
@@ -142,7 +144,7 @@ class PatchClampTestPulse(PatchClampRecording):
             base_i = base_median
             
             input_step = main_fit_yoffset - base_i
-            
+
             peak_rgn = pulse.time_slice(pulse.t0, pulse.t0 + 1e-3)
             if pulse_amp >= 0:
                 input_step = max(1e-16, input_step)
@@ -154,7 +156,7 @@ class PatchClampTestPulse(PatchClampRecording):
                 access_step = min(-1e-16, access_step)
 
             access_r = pulse_amp / access_step
-            input_r = pulse_amp / input_step
+            input_r = (pulse_amp / input_step) - access_r
             cap = main_fit_tau * (1 / access_r + 1 / input_r)
 
         else:  # IC mode
@@ -198,7 +200,6 @@ class PatchClampTestPulse(PatchClampRecording):
 
     def plot(self):
         assert self.analysis is not None
-        import pyqtgraph as pg
         plt = pg.plot(labels={'left': (self.plot_title, self.plot_units), 'bottom': ('time', 's')})
         plt.addLegend()
         plt.plot(self['primary'].time_values, self['primary'].data, name="raw")

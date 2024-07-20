@@ -23,20 +23,9 @@ def test_ic_pulse(pamp, r_input, r_access, c_soma, c_pip, only):
     tp_kwds = dict(pamp=pamp, pdur=200*ms, mode='ic', r_access=r_access, r_input=r_input, c_soma=c_soma, c_pip=c_pip)
     tp, _ = create_test_pulse(**tp_kwds)
     check_analysis(tp, _['soma'], tp_kwds, only=[only])
-    # failures:
-    # c_pip=1*pF, c_soma=200*pF, r_access=5*MOhm, r_input=500*MOhm, pamp=-10*pA
-    # c_pip=1*pF, c_soma=200*pF, r_access=5*MOhm, r_input=500*MOhm, pamp=10*pA
-    # c_pip=1*pF, c_soma=200*pF, r_access=10*MOhm, r_input=500*MOhm, pamp=-10*pA
-    # c_pip=3*pF, c_soma=200*pF, r_access=5*MOhm, r_input=500*MOhm, pamp=-10*pA
-    # c_pip=3*pF, c_soma=200*pF, r_access=5*MOhm, r_input=500*MOhm, pamp=10*pA
-    # c_pip=1*pF, c_soma=50*pF, r_access=15*MOhm, r_input=100*MOhm, pamp=-100*pA
-    # c_pip=1*pF, c_soma=50*pF, r_access=15*MOhm, r_input=200*MOhm, pamp=-100*pA
-    # c_pip=1*pF, c_soma=50*pF, r_access=15*MOhm, r_input=500*MOhm, pamp=-100*pA
-    # c_pip=1*pF, c_soma=200*pF, r_access=5*MOhm, r_input=500*MOhm, pamp=10*pA
-    # c_pip=1*pF, c_soma=200*pF, r_access=10*MOhm, r_input=500*MOhm, pamp=10*pA
 
 
-@pytest.mark.parametrize('pamp', [-20*mV, -10*mV, 10*mV])
+@pytest.mark.parametrize('pamp', [-85*mV, -75*mV, -55*mV])
 @pytest.mark.parametrize('r_input', [100*MOhm, 200*MOhm, 500*MOhm])
 @pytest.mark.parametrize('r_access', [5*MOhm, 10*MOhm, 15*MOhm])
 @pytest.mark.parametrize('c_soma', [50*pF, 100*pF, 200*pF])
@@ -157,7 +146,6 @@ def create_test_pulse(
     soma.L = soma.diam = (500 / np.pi) ** 0.5  # um (500 um²)
     soma.cm = soma.cm * c_soma / capacitance(soma)
     set_resistance(soma, r_input)
-    # nln, cmat, gmat, y, y0, b = set_pip_cap(c_pip)
 
     settle = 500 * ms if mode == 'ic' else 50 * ms
     pulse = np.ones((int((settle + start + pdur + settle) // dt),)) * hold
@@ -311,20 +299,23 @@ def check_analysis(pulse, cell, tp_kwds, only=None):
     for k, v1 in expected.items():
         v2 = measured[k]
         if v1 is None:
-            print(f"Expected None for {k}, measured {v2}")
+            print(f"FAILURE: expected None for {k}, measured {v2}")
+            mistakes = mistakes or v2 is not None
             continue
         elif v2 is None:
-            print(f"Expected {v1} for {k}, measured None")
+            print(f"FAILURE: expected {v1} for {k}, measured None")
+            mistakes = True
             continue
         if v1 == 0:
             err = abs(v1 - v2)
         else:
             err = abs((v1 - v2) / v1)
-        print(f"Expected {v1:g} for {k}, got {v2:g} (err {err:g})" if err > err_tolerance[k] else f"Expected {v1:g} for {k}, got {v2:g}")
         if err > err_tolerance[k]:
-            print(f"Expected {v1:g} for {k}, got {v2:g} (err {err:g} > {err_tolerance[k]:g})")
+            print(f"FAILURE: expected {v1:g} for {k}, got {v2:g} (err {err:g} > {err_tolerance[k]:g})")
             mistakes = True
-    assert not mistakes
+        else:
+            print(f"success: expected {v1:g} for {k}, got {v2:g} (err {err:g})")
+    assert not mistakes, ', '.join((f'{k}={v}' for k, v in tp_kwds.items()))
 
 
 if __name__ == '__main__':
@@ -351,27 +342,18 @@ if __name__ == '__main__':
 
     # failures:
     failures = [
-        "dict(c_pip=1*pF, c_soma=200*pF, r_access=5*MOhm, r_input=500*MOhm, pamp=-10*pA)",
-        "dict(c_pip=1*pF, c_soma=200*pF, r_access=5*MOhm, r_input=500*MOhm, pamp=10*pA)",
-        "dict(c_pip=1*pF, c_soma=200*pF, r_access=10*MOhm, r_input=500*MOhm, pamp=-10*pA)",
-        "dict(c_pip=3*pF, c_soma=200*pF, r_access=5*MOhm, r_input=500*MOhm, pamp=-10*pA)",
-        "dict(c_pip=3*pF, c_soma=200*pF, r_access=5*MOhm, r_input=500*MOhm, pamp=10*pA)",
-        "dict(c_pip=1*pF, c_soma=50*pF, r_access=15*MOhm, r_input=100*MOhm, pamp=-100*pA)",
-        "dict(c_pip=1*pF, c_soma=50*pF, r_access=15*MOhm, r_input=200*MOhm, pamp=-100*pA)",
-        "dict(c_pip=1*pF, c_soma=50*pF, r_access=15*MOhm, r_input=500*MOhm, pamp=-100*pA)",
-        "dict(c_pip=1*pF, c_soma=200*pF, r_access=5*MOhm, r_input=500*MOhm, pamp=10*pA)",
-        "dict(c_pip=1*pF, c_soma=200*pF, r_access=10*MOhm, r_input=500*MOhm, pamp=10*pA)",
+        "dict(pamp=-0.055, mode='vc', hold=-0.065, r_input=200000000, r_access=10000000, c_soma=2e-10, c_pip=1e-12)",
+        "dict(pamp=-0.075, mode='vc', hold=-0.065, r_input=200000000, r_access=10000000, c_soma=2e-10, c_pip=1e-12)",
     ]
     # ic_kwds = dict(pamp=-100*pA, mode='ic', r_input=200*MOhm, r_access=10*MOhm, pdur=50*ms, c_pip=1*pF, c_soma=100*pF)
-    for ic_kwds in failures:
-        title = ic_kwds[5:-1]
-        ic_kwds = eval(ic_kwds)
-        ic_kwds['mode'] = 'ic'
-        ic_kwds['pdur'] = 50 * ms
-        ic_tp, ic_locals = create_test_pulse(**ic_kwds)
-        if ic_kwds['c_soma'] == 200*pF:
-            print(ic_tp.analysis['time_constant'])
-        plt = ic_tp.plot()
+    for vc_kwds in failures:
+        title = vc_kwds[5:-1]
+        vc_kwds = eval(vc_kwds)
+        vc_kwds['mode'] = 'vc'
+        vc_kwds['hold'] = -65 * mV
+        vc_tp, vc_locals = create_test_pulse(**vc_kwds)
+        print(vc_tp.analysis['time_constant'])
+        plt = vc_tp.plot()
         plt.setTitle(title)
     pg.exec()
 
