@@ -52,11 +52,11 @@ def test_pulse_in_bath():
 
 
 def test_leaky_cell():
-    tp_kwds = dict(pamp=-10*mV, mode='vc', c_soma=10*pF, c_pip=0.1*pF, r_input=10*MOhm, r_access=10*MOhm)
+    tp_kwds = dict(pamp=-10*mV, mode='vc', r_input=80*MOhm, rmp_soma=-30*mV)
     tp, _ = create_test_pulse(**tp_kwds)
     check_analysis(tp, tp_kwds)
 
-    tp_kwds = dict(pamp=-100*pA, pdur=100*ms, mode='ic', c_soma=10*pF, c_pip=3*pF, r_input=10*MOhm, r_access=10*MOhm)
+    tp_kwds = dict(pamp=-100*pA, pdur=200*ms, mode='ic', r_input=80*MOhm, rmp_soma=-30*mV)
     tp, _ = create_test_pulse(**tp_kwds)
     check_analysis(tp, tp_kwds)
 
@@ -145,6 +145,7 @@ def create_test_pulse(
         pdur: float = 10*ms,
         pamp: float = -10*pA,
         hold: float = 0.0,
+        rmp_soma: float = -65*mV,
         mode: Literal['ic', 'vc'] = 'ic',
         dt: float = 10*us,
         r_access: float = 10*MOhm,
@@ -211,6 +212,8 @@ def create_test_pulse(
         soma.cm = soma.cm * c_soma / capacitance(soma)
         set_resistance(soma, r_input)
         pip_sections[-1].connect(soma(0.5), 1)
+        for seg in soma:
+            seg.pas.e = rmp_soma / mV
 
     total_surface_area = np.sum([section_surface(sec) for sec in pip_sections])
     pip_cap_per_area = c_pip / total_surface_area
@@ -469,6 +472,7 @@ def check_analysis(pulse, tp_kwds, only=None):
 if __name__ == '__main__':
     params = interact(
         create_test_pulse,
+        rmp_soma={'siPrefix': True, 'suffix': 'V'},
         r_access={'siPrefix': True, 'suffix': 'Ω'},
         r_input={'siPrefix': True, 'suffix': 'Ω'},
         c_soma={'siPrefix': True, 'suffix': 'F'},
