@@ -1,9 +1,11 @@
+import functools
+
 import numpy as np
 
 import pyqtgraph as pg
 
 from .data import PatchClampRecording, TSeries
-from .fitting.exp import exp_fit, fit_double_exp_decay
+from .fitting.exp import exp_fit, fit_double_exp_decay, fit_with_explicit_hessian, exp_decay
 from .stimuli import find_square_pulses
 
 
@@ -121,7 +123,8 @@ class PatchClampTestPulse(PatchClampRecording):
 
         # start by fitting the exponential decay from the post-pipette capacitance, ignoring initial transients
         main_fit_region = pulse.time_slice(pulse.t0 + 150e-6, None)
-        self.main_fit_result = exp_fit(main_fit_region)
+        # self.main_fit_result = exp_fit(main_fit_region)
+        self.main_fit_result = fit_with_explicit_hessian(main_fit_region)
         main_fit_yoffset, main_fit_amp, main_fit_tau = self.main_fit_result['fit']
         self.main_fit_trace = TSeries(self.main_fit_result['model'](pulse.time_values), time_values=pulse.time_values)
 

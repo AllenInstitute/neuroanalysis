@@ -3,6 +3,8 @@ from typing import Callable
 import functools
 import numpy as np
 import scipy.optimize
+from scipy.optimize import minimize, approx_fprime
+
 from .fitmodel import FitModel
 from ..data import TSeries
 
@@ -11,7 +13,7 @@ def exp_decay(t, yoffset, yscale, tau, xoffset=0):
     return yoffset + yscale * np.exp(-(t-xoffset) / tau)
 
 
-def estimate_exp_params(data):
+def estimate_exp_params(data: TSeries):
     """Estimate parameters for an exponential fit to data.
 
     Parameters
@@ -100,6 +102,56 @@ def fit_double_exp_decay(data: TSeries, pulse: TSeries, base_median: float, puls
         'initial_guess': initial_guess,
         'model': lambda t: double_exp_decay(t, *fit),
         'guessed_model': lambda t: double_exp_decay(t, *initial_guess),
+    }
+
+
+def fit_with_explicit_hessian(data: TSeries, **kwds):
+    """Using an explicit Hessian matrix, fit the model to data."""
+    model = functools.partial(exp_decay, xoffset=data.t0)
+    p0 = estimate_exp_params(data)[:3]
+
+    def gradient(p, t, y):
+        yoffset, scale, tau = p
+        y_pred = model(t, yoffset, scale, tau)
+        dy_dyoffset = -2 * np.sum(y - y_pred)
+        dy_dscale = -2 * np.sum((y - y_pred) * np.exp(-t / tau))
+        dy_dtau = 2 * np.sum((y - y_pred) * scale * t * np.exp(-t / tau) / tau ** 2)
+        return np.array([dy_dyoffset, dy_dscale, dy_dtau])
+
+    def hessian(p, t, y):
+        yoffset, scale, tau = p
+        y_pred = model(t, yoffset, scale, tau)
+        d2y_dyoffset2 = 2 * np.sum(1)
+        d2y_dyoffsetdscale = 2 * np.sum(np.exp(-t / tau))
+        d2y_dyoffsetdtau = 2 * np.sum(scale * t * np.exp(-t / tau) / tau)
+        d2y_dscale2 = 2 * np.sum(np.exp(-2 * t / tau))
+        d2y_dtau2 = 2 * np.sum((y - y_pred) * scale * t ** 2 * np.exp(-t / tau) / tau ** 4)
+        d2y_dscaledtau = -2 * np.sum(t * np.exp(-2 * t / tau) / tau)  # chatgpt
+        # d2y_dscaledtau = 2 * np.sum((y - y_pred) * t * np.exp(-t / tau) / tau ** 2)  # copilot
+        return np.array([
+            [d2y_dyoffset2, d2y_dyoffsetdscale, d2y_dyoffsetdtau],
+            [d2y_dyoffsetdscale, d2y_dscale2, d2y_dscaledtau],
+            [d2y_dyoffsetdtau, d2y_dscaledtau, d2y_dtau2],
+        ])
+
+    def error_function(p, t, y):
+        yoffset, scale, tau = p
+        return np.sum((y - model(t, yoffset, scale, tau)) ** 2)
+
+    result = minimize(
+        fun=error_function,
+        x0=p0,
+        args=(data.time_values, data.data),
+        jac=gradient,
+        hess=hessian,
+        method='trust-ncg',
+        **kwds,
+    )
+    return {
+        'fit': result.x,
+        'result': result,
+        'nrmse': normalized_rmse(data, result.x, model),
+        'model': lambda t: model(t, *result.x),
     }
 
 
