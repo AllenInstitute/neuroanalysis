@@ -110,14 +110,6 @@ def fit_with_explicit_hessian(data: TSeries, **kwds):
     model = functools.partial(exp_decay, xoffset=data.t0)
     p0 = estimate_exp_params(data)[:3]
 
-    def hand_checked_gradient(p, t, y):
-        yoffset, scale, tau = p
-        y_pred = model(t, yoffset, scale, tau)
-        dy_dyoffset = -2 * np.sum(y - y_pred)
-        dy_dscale = 2 * np.sum((yoffset + scale - y) * np.exp(-t / tau))
-        dy_dtau = np.sum(np.exp(-t / tau) * t * (scale ** 2 + 2 * scale * yoffset - 2 * scale * y) / tau ** 2)
-        return np.array([dy_dyoffset, dy_dscale, dy_dtau])
-
     def gradient(p, t, y):
         yoffset, scale, tau = p
         y_pred = model(t, yoffset, scale, tau)
@@ -128,18 +120,16 @@ def fit_with_explicit_hessian(data: TSeries, **kwds):
 
     def hand_checked_hessian(p, t, y):
         yoffset, scale, tau = p
-        y_pred = model(t, yoffset, scale, tau)
 
         d2_offset2 = 2 * len(t)
         d2_offsetscale = 2 * np.sum(np.exp(-t / tau))
         d2_offsettau = 2 * scale * np.sum(t * np.exp(-t / tau)) / tau**2
         d2_scaleoffset = 2 * np.sum(np.exp(-t / tau))
-        d2_scale2 = 2 * np.sum(np.exp(-t / tau))
-        d2_scaletau = 2 * np.sum(np.exp(-t / tau) * t * (scale ** 2 + 2 * scale * yoffset - 2 * scale * y)) / tau ** 2
+        d2_scale2 = 2 * np.sum(np.exp(-2 * t / tau))
+        d2_scaletau = 2 * np.sum((y - yoffset - 2 * scale * np.exp(-t / tau)) * t * np.exp(-t / tau) / tau ** 2)
         d2_tauoffset = d2_offsettau
         d2_tauscale = d2_scaletau
-        d2_tau2 = -2 * np.sum((y - y_pred) * scale * t ** 2 * np.exp(-t / tau) / tau ** 4)  # todo check this
-        # chatgpt: -2 * np.sum((y - y_pred) * scale * t ** 2 * np.exp(-t / tau) / tau ** 4)
+        d2_tau2 = -2 * np.sum((y - yoffset - 2 * scale * np.exp(-t / tau)) * scale * t ** 2 * (tau + 1) * np.exp(-t / tau) / tau ** 4)
 
         return np.array([
             [d2_offset2, d2_offsetscale, d2_offsettau],
@@ -171,9 +161,14 @@ def fit_with_explicit_hessian(data: TSeries, **kwds):
         fun=error_function,
         x0=p0,
         args=(data.time_values, data.data),
-        jac=hand_checked_gradient,
+        jac=gradient,
         hess=hand_checked_hessian,
-        method='trust-ncg',
+        # method='trust-ncg',
+        # method='trust-exact',
+        # method='trust-krylov',
+        # method='trust-constr',
+        # method='dogleg',
+        method='Newton-CG',
         **kwds,
     )
     return {
