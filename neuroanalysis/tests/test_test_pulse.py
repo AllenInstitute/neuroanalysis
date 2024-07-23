@@ -368,7 +368,9 @@ if __name__ == '__main__':
 
     # failures:
     failures = [
-        "dict(pamp=-0.01, mode='vc', r_access=10000000, r_input=1000000000, c_soma=1e-13, c_pip=3e-12)",
+        "dict(hold=-65*mV, pamp=-10*mV, mode='vc', c_soma=80*pF, c_pip=3*pF, r_input=100*MOhm, r_access=100*MOhm)",
+        "dict(hold=-65*mV, pamp=-120*mV, mode='vc', c_soma=80*pF, c_pip=3*pF, r_input=100*MOhm, r_access=100*MOhm)",
+        # "dict(pamp=-0.01, mode='vc', r_access=10000000, r_input=1000000000, c_soma=1e-13, c_pip=3e-12)",
         # "dict(pamp=-0.01, mode='vc', c_soma=False, c_pip=3e-12, r_input=False, r_access=10000000)",
         # "dict(pamp=-1e-10, pdur=0.2, mode='ic', r_access=15000000, r_input=100000000, c_soma=5e-11, c_pip=1e-11)"
     ]

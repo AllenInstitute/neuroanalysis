@@ -64,14 +64,14 @@ def exp_fit(data):
     }
 
 
-def fit_double_exp_decay(data: TSeries, pulse: TSeries, base_median: float, pulse_start: float, transientless_model: Callable):
+def fit_double_exp_decay(data: TSeries, pulse: TSeries, base_median: float, pulse_start: float, single_exp_model: Callable):
     prepulse_median = np.median(data.time_slice(pulse_start - 5e-3, pulse_start).data)
 
     def double_exp_decay(t, yoffset, tau, xoffset):
         amp = prepulse_median - yoffset
-        return exp_decay(t, yoffset, amp, tau, xoffset) + transientless_model(t) - yoffset
+        return exp_decay(t, yoffset, amp, tau, xoffset) + single_exp_model(t) - yoffset
 
-    y0 = transientless_model(pulse.t0)
+    y0 = single_exp_model(pulse.t0)
     initial_guess = (
         y0,
         10e-6,
