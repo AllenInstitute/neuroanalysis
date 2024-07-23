@@ -126,7 +126,7 @@ class PatchClampTestPulse(PatchClampRecording):
         # self.main_fit_result = exp_fit(main_fit_region)
         self.main_fit_result = fit_with_explicit_hessian(main_fit_region)
         main_fit_yoffset, main_fit_amp, main_fit_tau = self.main_fit_result['fit']
-        self.main_fit_trace = TSeries(self.main_fit_result['model'](pulse.time_values), time_values=pulse.time_values)
+        self.main_fit_trace = TSeries(self.main_fit_result['model'](main_fit_region.time_values), time_values=main_fit_region.time_values)
 
         # now fit with the initial transients included as an additional exponential decay
         try:
