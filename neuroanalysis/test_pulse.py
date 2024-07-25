@@ -45,6 +45,7 @@ class PatchClampTestPulse(PatchClampRecording):
         )
         self._analysis = None
         # expose these for display and debugging
+        self._main_fit_region = None
         self.main_fit_result = None
         self.main_fit_trace = None
         self.fit_result_with_transient = None
@@ -112,8 +113,7 @@ class PatchClampTestPulse(PatchClampRecording):
         
         pulse_start = data.t0 + self.stimulus.start_time
         pulse_stop = pulse_start + self.stimulus.duration
-        dt = data.dt
-        
+
         # Extract specific time segments
         padding = 50e-6
         base = data.time_slice(None, pulse_start-padding)
@@ -123,8 +123,9 @@ class PatchClampTestPulse(PatchClampRecording):
 
         # start by fitting the exponential decay from the post-pipette capacitance, ignoring initial transients
         main_fit_region = pulse.time_slice(pulse.t0 + 150e-6, None)
-        # self.main_fit_result = exp_fit(main_fit_region)
-        self.main_fit_result = fit_with_explicit_hessian(main_fit_region)
+        self._main_fit_region = main_fit_region
+        self.main_fit_result = exp_fit(main_fit_region)
+        # self.main_fit_result = fit_with_explicit_hessian(main_fit_region)
         main_fit_yoffset, main_fit_amp, main_fit_tau = self.main_fit_result['fit']
         self.main_fit_trace = TSeries(self.main_fit_result['model'](main_fit_region.time_values), time_values=main_fit_region.time_values)
 

@@ -44,19 +44,21 @@ def normalized_rmse(data, params, fn: Callable=exp_decay):
     return np.mean((y - data.data) ** 2)**0.5 / data.data.std()
 
 
-def exp_fit(data):
+def exp_fit(data: TSeries):
     initial_guess = estimate_exp_params(data)
+    # offset, scale, tau
     bounds = ([-np.inf, -np.inf, 0], [np.inf, np.inf, np.inf])
+    fn = functools.partial(exp_decay, xoffset=initial_guess[3])
     fit = scipy.optimize.curve_fit(
-        f=functools.partial(exp_decay, xoffset=initial_guess[3]),
+        f=fn,
         xdata=data.time_values, 
         ydata=data.data, 
         p0=initial_guess[:3], 
-        bounds=bounds, 
+        bounds=bounds,
         # ftol=1e-8, gtol=1e-8,
     )
-    nrmse = normalized_rmse(data, fit[0])
-    model = lambda t: exp_decay(t, *fit[0], xoffset=initial_guess[3])
+    nrmse = normalized_rmse(data, fit[0], fn)
+    model = lambda t: fn(t, *fit[0])
     return {
         'fit': fit[0], 
         'result': fit, 
@@ -163,12 +165,12 @@ def fit_with_explicit_hessian(data: TSeries, **kwds):
         args=(data.time_values, data.data),
         jac=gradient,
         hess=hand_checked_hessian,
-        # method='trust-ncg',
+        method='trust-ncg',
         # method='trust-exact',
         # method='trust-krylov',
         # method='trust-constr',
         # method='dogleg',
-        method='Newton-CG',
+        # method='Newton-CG',
         **kwds,
     )
     return {

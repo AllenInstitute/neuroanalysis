@@ -20,7 +20,7 @@ h.load_file('stdrun.hoc')
 @pytest.mark.parametrize('c_pip', [1*pF, 3*pF, 10*pF])
 # @pytest.mark.parametrize('only', ['input_resistance', 'capacitance', 'access_resistance'])
 def test_ic_pulse(pamp, r_input, r_access, c_soma, c_pip, only=None):
-    tp_kwds = dict(pamp=pamp, pdur=200*ms, mode='ic', r_access=r_access, r_input=r_input, c_soma=c_soma, c_pip=c_pip)
+    tp_kwds = dict(noise=0, pamp=pamp, pdur=200*ms, mode='ic', r_access=r_access, r_input=r_input, c_soma=c_soma, c_pip=c_pip)
     tp, _ = create_mock_test_pulse(**tp_kwds)
     if only:
         only = [only]
@@ -34,7 +34,7 @@ def test_ic_pulse(pamp, r_input, r_access, c_soma, c_pip, only=None):
 @pytest.mark.parametrize('c_pip', [1*pF, 3*pF, 10*pF])
 # @pytest.mark.parametrize('only', ['input_resistance', 'capacitance', 'access_resistance'])
 def test_vc_pulse(pamp, r_input, r_access, c_soma, c_pip, only=None):
-    tp_kwds = dict(pamp=pamp, pdur=20*ms, mode='vc', hold=-65*mV, r_input=r_input, r_access=r_access, c_soma=c_soma, c_pip=c_pip)
+    tp_kwds = dict(noise=0, pamp=pamp, pdur=20*ms, mode='vc', hold=-65*mV, r_input=r_input, r_access=r_access, c_soma=c_soma, c_pip=c_pip)
     tp, _ = create_mock_test_pulse(**tp_kwds)
     if only:
         only = [only]
@@ -42,21 +42,21 @@ def test_vc_pulse(pamp, r_input, r_access, c_soma, c_pip, only=None):
 
 
 def test_pulse_in_bath():
-    tp_kwds = dict(pamp=-10*mV, mode='vc', c_soma=False, c_pip=3*pF, r_input=False, r_access=10*MOhm)
+    tp_kwds = dict(noise=0, pamp=-10*mV, mode='vc', c_soma=False, c_pip=3*pF, r_input=False, r_access=10*MOhm)
     tp, _ = create_mock_test_pulse(**tp_kwds)
     check_analysis(tp, tp_kwds)
 
-    tp_kwds = dict(pamp=-100*pA, pdur=100*ms, mode='ic', c_soma=False, c_pip=3*pF, r_input=False, r_access=10*MOhm)
+    tp_kwds = dict(noise=0, pamp=-100*pA, pdur=100*ms, mode='ic', c_soma=False, c_pip=3*pF, r_input=False, r_access=10*MOhm)
     tp, _ = create_mock_test_pulse(**tp_kwds)
     check_analysis(tp, tp_kwds)
 
 
 def test_leaky_cell():
-    tp_kwds = dict(pamp=-10*mV, mode='vc', r_input=80*MOhm, rmp_soma=-30*mV)
+    tp_kwds = dict(noise=0, pamp=-10*mV, mode='vc', r_input=80*MOhm, rmp_soma=-30*mV)
     tp, _ = create_mock_test_pulse(**tp_kwds)
     check_analysis(tp, tp_kwds)
 
-    tp_kwds = dict(pamp=-100*pA, pdur=200*ms, mode='ic', r_input=80*MOhm, rmp_soma=-30*mV)
+    tp_kwds = dict(noise=0, pamp=-100*pA, pdur=200*ms, mode='ic', r_input=80*MOhm, rmp_soma=-30*mV)
     tp, _ = create_mock_test_pulse(**tp_kwds)
     check_analysis(tp, tp_kwds)
 
@@ -70,21 +70,21 @@ def test_with_12kHz_noise():
 
 
 def test_clogged_pipette():
-    tp_kwds = dict(pamp=-10*mV, mode='vc', c_soma=80*pF, c_pip=3*pF, r_input=100*MOhm, r_access=100*MOhm)
+    tp_kwds = dict(noise=0, pamp=-10*mV, pdur=10*ms, mode='vc', c_soma=80*pF, c_pip=3*pF, r_input=100*MOhm, r_access=100*MOhm)
     tp, _ = create_mock_test_pulse(**tp_kwds)
     check_analysis(tp, tp_kwds)
 
-    tp_kwds = dict(pamp=-100*pA, pdur=200*ms, mode='ic', c_soma=80*pF, c_pip=3*pF, r_input=100*MOhm, r_access=100*MOhm)
+    tp_kwds = dict(noise=0, pamp=-100*pA, pdur=200*ms, mode='ic', c_soma=80*pF, c_pip=3*pF, r_input=100*MOhm, r_access=100*MOhm)
     tp, _ = create_mock_test_pulse(**tp_kwds)
     check_analysis(tp, tp_kwds)
 
 
 def test_cell_attached():
-    tp_kwds = dict(pamp=-10*mV, mode='vc', c_soma=0.1*pF, c_pip=3*pF, r_input=1000*MOhm, r_access=10*MOhm)
+    tp_kwds = dict(noise=0, pamp=-10*mV, mode='vc', c_soma=0.1*pF, c_pip=3*pF, r_input=1000*MOhm, r_access=10*MOhm)
     tp, _ = create_mock_test_pulse(**tp_kwds)
     check_analysis(tp, tp_kwds)
 
-    tp_kwds = dict(pamp=-100*pA, pdur=200*ms, mode='ic', c_soma=0.1*pF, c_pip=3*pF, r_input=1000*MOhm, r_access=10*MOhm)
+    tp_kwds = dict(noise=0, pamp=-100*pA, pdur=200*ms, mode='ic', c_soma=0.1*pF, c_pip=3*pF, r_input=1000*MOhm, r_access=10*MOhm)
     tp, _ = create_mock_test_pulse(**tp_kwds)
     check_analysis(tp, tp_kwds)
 
@@ -153,7 +153,7 @@ def create_mock_test_pulse(
         c_soma: float = 100*pF,
         c_pip: float = 5*pF,
         plot: bool = False,
-        noise: float = 5*pA,
+        noise: float = 0.5*pA,
         assert_valid: bool = False,
 ):
     settle = 500 * ms if mode == 'ic' else 50 * ms
@@ -212,6 +212,8 @@ def create_mock_test_pulse(
         out = vc_rec.as_numpy() * nA
 
     out = out[int(settle // dt):int((settle + start + pdur + settle) // dt)]
+    if noise:
+        out += np.random.normal(0, noise, out.shape)
     pulse = pulse[int(settle // dt):int((settle + start + pdur + settle) // dt)]
 
     tp = PatchClampTestPulse(
@@ -368,8 +370,8 @@ if __name__ == '__main__':
 
     # failures:
     failures = [
-        "dict(hold=-65*mV, pamp=-10*mV, mode='vc', c_soma=80*pF, c_pip=3*pF, r_input=100*MOhm, r_access=100*MOhm)",
-        "dict(hold=-65*mV, pamp=-120*mV, mode='vc', c_soma=80*pF, c_pip=3*pF, r_input=100*MOhm, r_access=100*MOhm)",
+        # "dict(hold=-65*mV, pdur=10*ms, pamp=-10*mV, mode='vc', c_soma=80*pF, c_pip=3*pF, r_input=100*MOhm, r_access=100*MOhm)",
+        "dict(hold=-65*mV, pdur=10*ms, pamp=-120*mV, mode='vc', c_soma=80*pF, c_pip=3*pF, r_input=100*MOhm, r_access=100*MOhm)",
         # "dict(pamp=-0.01, mode='vc', r_access=10000000, r_input=1000000000, c_soma=1e-13, c_pip=3e-12)",
         # "dict(pamp=-0.01, mode='vc', c_soma=False, c_pip=3e-12, r_input=False, r_access=10000000)",
         # "dict(pamp=-1e-10, pdur=0.2, mode='ic', r_access=15000000, r_input=100000000, c_soma=5e-11, c_pip=1e-11)"
@@ -381,7 +383,7 @@ if __name__ == '__main__':
         print(title)
         print(vc_tp.clamp_mode, vc_tp.plot_units, vc_tp.analysis['time_constant'])
         plt = vc_tp.plot()
-        plt.setTitle(title)
+        plt.setTitle(f"tau: {vc_tp.analysis['time_constant']}, nrmse: {vc_tp.main_fit_result['nrmse']}")
         # check_analysis(vc_tp, vc_kwds)
     pg.exec()
 
