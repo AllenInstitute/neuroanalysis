@@ -70,11 +70,12 @@ def test_with_12kHz_noise():
 
 
 def test_clogged_pipette():
-    tp_kwds = dict(noise=0, pamp=-10*mV, pdur=10*ms, mode='vc', c_soma=80*pF, c_pip=3*pF, r_input=100*MOhm, r_access=100*MOhm)
+    shared_kwds = dict(noise=0, c_soma=80*pF, c_pip=3*pF, r_input=100*MOhm, r_access=100*MOhm)
+    tp_kwds = dict(pamp=-20*mV, pdur=10*ms, mode='vc', **shared_kwds)
     tp, _ = create_mock_test_pulse(**tp_kwds)
     check_analysis(tp, tp_kwds)
 
-    tp_kwds = dict(noise=0, pamp=-100*pA, pdur=200*ms, mode='ic', c_soma=80*pF, c_pip=3*pF, r_input=100*MOhm, r_access=100*MOhm)
+    tp_kwds = dict(pamp=-100*pA, pdur=200*ms, mode='ic', **shared_kwds)
     tp, _ = create_mock_test_pulse(**tp_kwds)
     check_analysis(tp, tp_kwds)
 

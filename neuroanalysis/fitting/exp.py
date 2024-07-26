@@ -71,6 +71,40 @@ def exp_fit(data: TSeries):
     }
 
 
+def double_exp_fit(data: TSeries):
+    def fn(t, pip_offset, pip_scale, pip_tau, cell_offset, cell_scale, cell_tau):
+        return (exp_decay(t, pip_offset, pip_scale, pip_tau, data.t0)
+                + exp_decay(t, cell_offset, cell_scale, cell_tau, data.t0 + 150e-6)
+                - cell_offset)
+
+    initial_guess = estimate_exp_params(data)[:3]
+    initial_guess = (
+        exp_decay(data.t0, *initial_guess, data.t0 + 150e-6),
+        10e-6,
+        initial_guess[2] / 10,
+        *initial_guess,
+    )
+    bounds = ([-np.inf, -np.inf, 0, -np.inf, -np.inf, 0], [np.inf, np.inf, np.inf, np.inf, np.inf, np.inf])
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        fit = scipy.optimize.curve_fit(
+            f=fn,
+            xdata=data.time_values,
+            ydata=data.data,
+            p0=initial_guess,
+            bounds=bounds,
+        )
+    nrmse = normalized_rmse(data, fit[0], fn)
+    model = lambda t: fn(t, *fit[0])
+    return {
+        'fit': fit[0],
+        'result': fit,
+        'nrmse': nrmse,
+        'initial_guess': initial_guess,
+        'model': model,
+    }
+
+
 def fit_double_exp_decay(data: TSeries, pulse: TSeries, base_median: float, pulse_start: float, single_exp_model: Callable):
     prepulse_median = np.median(data.time_slice(pulse_start - 5e-3, pulse_start).data)
 
