@@ -1,9 +1,10 @@
+import warnings
 from typing import Callable
 
 import functools
 import numpy as np
 import scipy.optimize
-from scipy.optimize import minimize, approx_fprime
+from scipy.optimize import minimize
 
 from .fitmodel import FitModel
 from ..data import TSeries
@@ -49,14 +50,16 @@ def exp_fit(data: TSeries):
     # offset, scale, tau
     bounds = ([-np.inf, -np.inf, 0], [np.inf, np.inf, np.inf])
     fn = functools.partial(exp_decay, xoffset=initial_guess[3])
-    fit = scipy.optimize.curve_fit(
-        f=fn,
-        xdata=data.time_values, 
-        ydata=data.data, 
-        p0=initial_guess[:3], 
-        bounds=bounds,
-        # ftol=1e-8, gtol=1e-8,
-    )
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        fit = scipy.optimize.curve_fit(
+            f=fn,
+            xdata=data.time_values,
+            ydata=data.data,
+            p0=initial_guess[:3],
+            bounds=bounds,
+            # ftol=1e-8, gtol=1e-8,
+        )
     nrmse = normalized_rmse(data, fit[0], fn)
     model = lambda t: fn(t, *fit[0])
     return {
@@ -87,14 +90,16 @@ def fit_double_exp_decay(data: TSeries, pulse: TSeries, base_median: float, puls
         (pulse_start - 5e-6, pulse_start + 100e-6),  # xoffset
     ))
     fit_region = data.time_slice(pulse_start, pulse_start + 5e-3)
-    result = scipy.optimize.curve_fit(
-        f=double_exp_decay,
-        xdata=fit_region.time_values,
-        ydata=fit_region.data,
-        p0=initial_guess,
-        bounds=bounds,
-        # ftol=1e-8, gtol=1e-8,
-    )
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        result = scipy.optimize.curve_fit(
+            f=double_exp_decay,
+            xdata=fit_region.time_values,
+            ydata=fit_region.data,
+            p0=initial_guess,
+            bounds=bounds,
+            # ftol=1e-8, gtol=1e-8,
+        )
     fit = result[0]
     nrmse = normalized_rmse(pulse, fit, double_exp_decay)
     return {

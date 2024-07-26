@@ -25,4 +25,3 @@ def test_bad_curve(plot=False):
 
 if __name__ == '__main__':
     test_bad_curve(plot=True)
-    print("All tests passed")
