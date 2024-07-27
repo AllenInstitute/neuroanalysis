@@ -71,11 +71,14 @@ def exp_fit(data: TSeries):
     }
 
 
-def double_exp_fit(data: TSeries):
-    def fn(t, pip_offset, pip_scale, pip_tau, cell_offset, cell_scale, cell_tau):
-        return (exp_decay(t, pip_offset, pip_scale, pip_tau, data.t0)
+def double_exp_fit(data: TSeries, pulse_start: float):
+    prepulse_median = np.median(data.time_slice(pulse_start - 5e-3, pulse_start).data)
+
+    def fn(t, pip_yoffset, pip_xoffset, pip_tau, cell_offset, cell_scale, cell_tau):
+        amp = prepulse_median - pip_yoffset
+        return (exp_decay(t, pip_yoffset, amp, pip_tau, pip_xoffset)
                 + exp_decay(t, cell_offset, cell_scale, cell_tau, data.t0 + 150e-6)
-                - cell_offset)
+                - pip_yoffset)
 
     initial_guess = estimate_exp_params(data)[:3]
     initial_guess = (

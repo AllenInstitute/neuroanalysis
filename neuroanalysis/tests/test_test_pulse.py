@@ -363,30 +363,18 @@ if __name__ == '__main__':
     tree.setParameters(params)
     tree.show()
     pg.exec()
-    #
-    # # vc_kwds = dict(pamp=-85*mV, mode='vc', hold=-65*mV, r_input=200*MOhm, r_access=5*MOhm, c_pip=1*pF, c_soma=100*pF)
-    # # vc_tp, vc_locals = create_test_pulse(**vc_kwds)
-    # # vc_tp.plot()
-    #
 
-    # failures:
     failures = [
-        # "dict(hold=-65*mV, pdur=10*ms, pamp=-10*mV, mode='vc', c_soma=80*pF, c_pip=3*pF, r_input=100*MOhm, r_access=100*MOhm)",
         "dict(hold=-65*mV, pdur=10*ms, pamp=-120*mV, mode='vc', c_soma=80*pF, c_pip=3*pF, r_input=100*MOhm, r_access=100*MOhm)",
-        # "dict(pamp=-0.01, mode='vc', r_access=10000000, r_input=1000000000, c_soma=1e-13, c_pip=3e-12)",
-        # "dict(pamp=-0.01, mode='vc', c_soma=False, c_pip=3e-12, r_input=False, r_access=10000000)",
-        # "dict(pamp=-1e-10, pdur=0.2, mode='ic', r_access=15000000, r_input=100000000, c_soma=5e-11, c_pip=1e-11)"
     ]
-    for vc_kwds in failures:
-        title = vc_kwds[5:-1]
-        vc_kwds = eval(vc_kwds)
-        vc_tp, vc_locals = create_mock_test_pulse(**vc_kwds)
+    for _kwds in failures:
+        title = _kwds[5:-1]
+        _kwds = eval(_kwds)
+        _tp, vc_locals = create_mock_test_pulse(**_kwds)
         print(title)
-        print(vc_tp.clamp_mode, vc_tp.plot_units, vc_tp.analysis['time_constant'])
-        plt = vc_tp.plot()
-        plt.setTitle(f"tau: {vc_tp.analysis['time_constant']}, nrmse: {vc_tp.main_fit_result['nrmse']}")
-        # check_analysis(vc_tp, vc_kwds)
-    pg.exec()
-
-    # # check_analysis(ic_tp, ic_kwds)
-    # # check_analysis(vc_tp, vc_kwds)
+        print(_tp.clamp_mode, _tp.plot_units, _tp.analysis['time_constant'])
+        plt = _tp.plot()
+        plt.setTitle(f"tau: {_tp.analysis['time_constant']}, nrmse: {_tp.main_fit_result['nrmse']}")
+        print(f"tp.analysis: {_tp.analysis}")
+        pg.exec()
+        check_analysis(_tp, _kwds)
