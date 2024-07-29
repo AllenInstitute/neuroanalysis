@@ -6,36 +6,40 @@ import pyqtgraph as pg
 
 from .data import PatchClampRecording, TSeries
 from .fitting.exp import exp_fit, fit_double_exp_decay, fit_with_explicit_hessian, exp_decay, double_exp_fit
-from .stimuli import find_square_pulses
+from .stimuli import find_square_pulses, SquarePulse
 
 
 class PatchClampTestPulse(PatchClampRecording):
     """A PatchClampRecording that contains a subthreshold, square pulse stimulus.
     """
-    def __init__(self, rec: PatchClampRecording, indices=None):
+    def __init__(self, rec: PatchClampRecording, indices=None, stimulus=None):
         if indices is None:
             indices = (0, len(rec['primary']))
         self._indices = indices
         start, stop = indices
 
         pri = rec['primary'][start:stop]
-        cmd = rec['command'][start:stop]
+        channels = {'primary': pri}
+        if stimulus is None:
+            cmd = rec['command'][start:stop]
+            channels['command'] = cmd
+            # find pulse
+            pulses = find_square_pulses(cmd)
+            if len(pulses) == 0:
+                raise ValueError("Could not find square pulse in command waveform. Consider using `indices`.")
+            elif len(pulses) > 1:
+                raise ValueError("Found multiple square pulse in command waveform. Consider using `indices`.")
+            pulse = pulses[0]
+            pulse.description = 'test pulse'
+            stimulus = pulse
 
-        # find pulse
-        pulses = find_square_pulses(cmd)
-        if len(pulses) == 0:
-            raise ValueError("Could not find square pulse in command waveform. Consider using `indices`.")
-        elif len(pulses) > 1:
-            raise ValueError("Found multiple square pulse in command waveform. Consider using `indices`.")
-        pulse = pulses[0]
-        pulse.description = 'test pulse'
         super().__init__(
             recording=rec,
             device_type=rec.device_type,
             device_id=rec.device_id,
             start_time=rec.start_time,
-            channels={'primary': pri, 'command': cmd},
-            stimulus=pulse,
+            channels=channels,
+            stimulus=stimulus,
             clamp_mode=rec.clamp_mode,
             holding_potential=rec.meta['holding_potential'],
             holding_current=rec.meta['holding_current'],
@@ -51,6 +55,44 @@ class PatchClampTestPulse(PatchClampRecording):
         self.fit_result_with_transient = None
         self.fit_trace_with_transient = None
         self.initial_double_fit_trace = None
+
+    def dump(self):
+        """Return a dictionary with all data needed to reconstruct this object.
+        """
+        return {
+            'device_type': self.device_type,
+            'device_id': self.device_id,
+            'start_time': self.start_time,
+            'stimulus': self.stimulus.dump(),
+            'data': self['primary'].data,
+            'time_values': self['primary'].time_values,
+            'clamp_mode': self.clamp_mode,
+            'holding_potential':  self.holding_potential,
+            'holding_current':  self.holding_current,
+            'bridge_balance':  self._meta['bridge_balance'],
+            'lpf_cutoff':  self._meta['lpf_cutoff'],
+            'pipette_offset':  self._meta['pipette_offset'],
+        }
+
+    @classmethod
+    def load(cls, data):
+        """Reconstruct a PatchClampTestPulse from data returned by `dump()`.
+        """
+        stim = SquarePulse(**data['stimulus'])
+        rec = PatchClampRecording(
+            device_type=data['device_type'],
+            device_id=data['device_id'],
+            start_time=data['start_time'],
+            channels={'primary': TSeries(data['data'], time_values=data['time_values'])},
+            stimulus=stim,
+            clamp_mode=data['clamp_mode'],
+            holding_potential=data['holding_potential'],
+            holding_current=data['holding_current'],
+            bridge_balance=data['bridge_balance'],
+            lpf_cutoff=data['lpf_cutoff'],
+            pipette_offset=data['pipette_offset'],
+        )
+        return cls(rec, stimulus=stim)
 
     @property
     def indices(self):
@@ -147,7 +189,9 @@ class PatchClampTestPulse(PatchClampRecording):
 
         else:  # IC mode
             base_v = base_median
-            base_i = self._meta.get('holding_current', self['command'].data[0])
+            base_i = self._meta.get('holding_current')
+            if base_i is None:
+                base_i = self['command'].data[0]
             y0 = initial_transient_curve_y
             
             if pulse_amp >= 0:

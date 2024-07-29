@@ -346,6 +346,16 @@ def check_analysis(pulse, tp_kwds, only=None):
     assert not mistakes, ', '.join((f'{k}={v}' for k, v in tp_kwds.items()))
 
 
+def test_load():
+    tp, _ = create_mock_test_pulse()
+    new_tp = PatchClampTestPulse.load(tp.dump())
+    for k, v in tp.analysis.items():
+        if isinstance(v, (np.ndarray, int, float)):
+            assert np.allclose(v, new_tp.analysis[k])
+        else:
+            assert v == new_tp.analysis[k]
+
+
 if __name__ == '__main__':
     params = interact(
         create_mock_test_pulse,
