@@ -61,7 +61,6 @@ class H5BackedTestPulseStack:
         """Return the test pulse at or immediately previous to the provided time."""
         keys = np.array(list(self._test_pulses.keys()))  # Todo cache this?
         idx = np.searchsorted(keys, when)
-        print(f"at_time({when}) idx: {idx}")
         if idx == 0:
             return None
         if idx == len(keys):
