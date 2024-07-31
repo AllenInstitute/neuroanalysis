@@ -207,6 +207,7 @@ class PatchClampTestPulse(PatchClampRecording):
             cap = main_fit_tau / input_r
 
         self._analysis = {
+            'start_time': self.start_time,
             'steady_state_resistance': input_r + access_r,
             'input_resistance': input_r,
             'access_resistance': access_r,
