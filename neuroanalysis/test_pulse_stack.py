@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+
 import h5py
 import numpy as np
 
@@ -10,7 +12,7 @@ class H5BackedTestPulseStack:
     """A caching, HDF5-backed stack of test pulses."""
 
     def __init__(self, h5_group: h5py.Group):
-        self._h5_group = h5_group
+        self._containing_groups = [h5_group]
         self._test_pulses: dict[float, PatchClampTestPulse | None] = {}
         # pre-cache just the names of existing test pulses from the file
         for fh in h5_group:
@@ -21,7 +23,7 @@ class H5BackedTestPulseStack:
             raise KeyError(f"Test pulse at time {key} not found")
         if self._test_pulses[key] is None:
             # load the test pulse from the file
-            tp = self._h5_group[str(key)]
+            tp = next(grp[str(key)] for grp in self._containing_groups if str(key) in grp)
             rec = dict(tp.attrs.items())
             rec['time_values'] = tp[:, 0]
             rec['data'] = tp[:, 1]
@@ -29,20 +31,29 @@ class H5BackedTestPulseStack:
             self._test_pulses[key] = PatchClampTestPulse.load(rec)
         return self._test_pulses[key]
 
+    def merge(self, other: H5BackedTestPulseStack):
+        """Merge another stack into this one."""
+        self._containing_groups += other._containing_groups
+        # sort the groups by time to make append logic easy
+        self._containing_groups.sort(key=lambda grp: os.path.getmtime(grp.file.filename))
+        self._test_pulses.update(other._test_pulses)
+
     def __len__(self) -> int:
         return len(self._test_pulses)
 
     def close(self):
-        self._h5_group.file.close()
+        for grp in self._containing_groups:
+            grp.file.close()
 
     def flush(self):
-        self._h5_group.file.flush()
+        for grp in self._containing_groups:
+            grp.file.flush()
 
-    def append(self, test_pulse: PatchClampTestPulse) -> None:
-        """Append a test pulse to the stack."""
+    def append(self, test_pulse: PatchClampTestPulse) -> str:
+        """Append a test pulse to the stack. Returns the full path name of the dataset."""
         rec = test_pulse.dump()
         data = np.column_stack((rec['time_values'], rec['data']))
-        tp = self._h5_group.create_dataset(
+        dataset = self._containing_groups[-1].create_dataset(
             str(rec['start_time']),
             data=data,
             compression='gzip',
@@ -50,12 +61,13 @@ class H5BackedTestPulseStack:
         )
         for k, v in rec.items():
             if k not in ('time_values', 'data', 'stimulus'):
-                tp.attrs[k] = v or 0  # None values are not allowed
+                dataset.attrs[k] = v or 0  # None values are not allowed
         for k, v in rec['stimulus'].items():
-            tp.attrs[f"stimulus_{k}"] = v
+            dataset.attrs[f"stimulus_{k}"] = v
 
-        # Update the cache
         self._test_pulses[test_pulse.start_time] = test_pulse
+
+        return f"{dataset.file.filename}:{dataset.name}"
 
     def at_time(self, when: float) -> PatchClampTestPulse | None:
         """Return the test pulse at or immediately previous to the provided time."""
