@@ -17,6 +17,7 @@ class H5BackedTestPulseStack:
         # pre-cache just the names of existing test pulses from the file
         for fh in h5_group:
             self._test_pulses[float(fh)] = None
+        self._np_timestamp_cache = np.array(list(self._test_pulses.keys()))
 
     def __getitem__(self, key: float) -> PatchClampTestPulse:
         if key not in self._test_pulses:
@@ -37,6 +38,7 @@ class H5BackedTestPulseStack:
         # sort the groups by time to make append logic easy
         self._containing_groups.sort(key=lambda grp: os.path.getmtime(grp.file.filename))
         self._test_pulses.update(other._test_pulses)
+        self._np_timestamp_cache = np.concatenate((self._np_timestamp_cache, other._np_timestamp_cache))
 
     def __len__(self) -> int:
         return len(self._test_pulses)
@@ -66,12 +68,13 @@ class H5BackedTestPulseStack:
             dataset.attrs[f"stimulus_{k}"] = v
 
         self._test_pulses[test_pulse.start_time] = test_pulse
+        self._np_timestamp_cache = np.append(self._np_timestamp_cache, test_pulse.start_time)
 
         return f"{dataset.file.filename}:{dataset.name}"
 
     def at_time(self, when: float) -> PatchClampTestPulse | None:
         """Return the test pulse at or immediately previous to the provided time."""
-        keys = np.array(list(self._test_pulses.keys()))  # Todo cache this?
+        keys = self._np_timestamp_cache
         idx = np.searchsorted(keys, when)
         if idx == 0:
             return None
