@@ -158,22 +158,25 @@ def fit_with_explicit_hessian(data: TSeries, **kwds):
         yoffset, scale, tau = p
         y_pred = model(t, yoffset, scale, tau)
         dy_dyoffset = -2 * np.sum(y - y_pred)
-        dy_dscale = -2 * np.sum((y - y_pred) * np.exp(-t / tau))
-        dy_dtau = 2 * np.sum((y - y_pred) * scale * t * np.exp(-t / tau) / tau ** 2)
+        t_over_tau = t / tau
+        dy_dscale = -2 * np.sum((y - y_pred) * np.exp(-t_over_tau))
+        dy_dtau = -2 * np.sum((y - y_pred) * scale * t * np.exp(-t_over_tau) / tau ** 2)
         return np.array([dy_dyoffset, dy_dscale, dy_dtau])
 
     def hand_checked_hessian(p, t, y):
         yoffset, scale, tau = p
+        t_over_tau = t / tau
+        e_to_the_minus_t_over_tau = np.exp(-t_over_tau)
 
         d2_offset2 = 2 * len(t)
-        d2_offsetscale = 2 * np.sum(np.exp(-t / tau))
-        d2_offsettau = 2 * scale * np.sum(t * np.exp(-t / tau)) / tau**2
-        d2_scaleoffset = 2 * np.sum(np.exp(-t / tau))
+        d2_offsetscale = 2 * np.sum(e_to_the_minus_t_over_tau)
+        d2_offsettau = 2 * scale * np.sum(t * e_to_the_minus_t_over_tau) / tau**2
+        d2_scaleoffset = 2 * np.sum(e_to_the_minus_t_over_tau)
         d2_scale2 = 2 * np.sum(np.exp(-2 * t / tau))
-        d2_scaletau = 2 * np.sum((y - yoffset - 2 * scale * np.exp(-t / tau)) * t * np.exp(-t / tau) / tau ** 2)
+        d2_scaletau = 2 * np.sum((y - yoffset - 2 * scale * e_to_the_minus_t_over_tau) * t * e_to_the_minus_t_over_tau / tau ** 2)
         d2_tauoffset = d2_offsettau
         d2_tauscale = d2_scaletau
-        d2_tau2 = -2 * np.sum((y - yoffset - 2 * scale * np.exp(-t / tau)) * scale * t ** 2 * (tau + 1) * np.exp(-t / tau) / tau ** 4)
+        d2_tau2 = -2 * np.sum((y - yoffset - 2 * scale * e_to_the_minus_t_over_tau) * scale * (t ** 2) * (2 * tau + 1) * e_to_the_minus_t_over_tau / (tau ** 4))
 
         return np.array([
             [d2_offset2, d2_offsetscale, d2_offsettau],
@@ -199,7 +202,7 @@ def fit_with_explicit_hessian(data: TSeries, **kwds):
 
     def error_function(p, t, y):
         yoffset, scale, tau = p
-        return np.sum((y - model(t, yoffset, scale, tau)) ** 2)
+        return np.sum((y - model(t, yoffset, scale, tau)) ** 2) / len(t)
 
     result = minimize(
         fun=error_function,
