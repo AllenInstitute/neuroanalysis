@@ -51,7 +51,7 @@ class H5BackedTestPulseStack:
         for grp in self._containing_groups:
             grp.file.flush()
 
-    def append(self, test_pulse: PatchClampTestPulse) -> str:
+    def append(self, test_pulse: PatchClampTestPulse) -> tuple[str, str]:
         """Append a test pulse to the stack. Returns the full path name of the dataset."""
         rec = test_pulse.dump()
         data = np.column_stack((rec['time_values'], rec['data']))
@@ -70,7 +70,7 @@ class H5BackedTestPulseStack:
         self._test_pulses[test_pulse.start_time] = test_pulse
         self._np_timestamp_cache = np.append(self._np_timestamp_cache, test_pulse.start_time)
 
-        return f"{dataset.file.filename}:{dataset.name}"
+        return dataset.file.filename, dataset.name
 
     def at_time(self, when: float) -> PatchClampTestPulse | None:
         """Return the test pulse at or immediately previous to the provided time."""
