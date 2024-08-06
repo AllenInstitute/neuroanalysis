@@ -7,7 +7,7 @@ import pyqtgraph as pg
 
 from neuroanalysis.data import TSeries, PatchClampRecording
 from neuroanalysis.test_pulse import PatchClampTestPulse
-from neuroanalysis.units import pA, mV, MOhm, pF, uF, us, ms, cm, nA, um, mm
+from neuroanalysis.units import pA, mV, uV, MOhm, pF, uF, us, ms, cm, nA, um, mm
 from pyqtgraph.parametertree import ParameterTree, interact
 
 h.load_file('stdrun.hoc')
@@ -20,7 +20,7 @@ h.load_file('stdrun.hoc')
 @pytest.mark.parametrize('c_pip', [1*pF, 3*pF, 10*pF])
 # @pytest.mark.parametrize('only', ['input_resistance', 'capacitance', 'access_resistance'])
 def test_ic_pulse(pamp, r_input, r_access, c_soma, c_pip, only=None):
-    tp_kwds = dict(noise=0, pamp=pamp, pdur=200*ms, mode='ic', r_access=r_access, r_input=r_input, c_soma=c_soma, c_pip=c_pip)
+    tp_kwds = dict(noise=10*uV, pamp=pamp, pdur=200*ms, mode='ic', r_access=r_access, r_input=r_input, c_soma=c_soma, c_pip=c_pip)
     tp, _ = create_mock_test_pulse(**tp_kwds)
     if only:
         only = [only]
@@ -34,7 +34,7 @@ def test_ic_pulse(pamp, r_input, r_access, c_soma, c_pip, only=None):
 @pytest.mark.parametrize('c_pip', [1*pF, 3*pF, 10*pF])
 # @pytest.mark.parametrize('only', ['input_resistance', 'capacitance', 'access_resistance'])
 def test_vc_pulse(pamp, r_input, r_access, c_soma, c_pip, only=None):
-    tp_kwds = dict(noise=0, pamp=pamp, pdur=20*ms, mode='vc', hold=-65*mV, r_input=r_input, r_access=r_access, c_soma=c_soma, c_pip=c_pip)
+    tp_kwds = dict(noise=1*pA, pamp=pamp, pdur=20*ms, mode='vc', hold=-65*mV, r_input=r_input, r_access=r_access, c_soma=c_soma, c_pip=c_pip)
     tp, _ = create_mock_test_pulse(**tp_kwds)
     if only:
         only = [only]

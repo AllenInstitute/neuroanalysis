@@ -27,8 +27,8 @@ def estimate_exp_params(data: TSeries):
     params : tuple
         (yoffset, yscale, tau, toffset)
     """
-    start_y = data.data[:len(data.data)//100].mean()
-    end_y = data.data[-len(data.data)//10:].mean()
+    start_y = data.data[:len(data.data)//10].mean()
+    end_y = data.data[-len(data.data)//100:].mean()
     yscale = start_y - end_y
     yoffset = end_y
     cs = np.cumsum(data.data - yoffset)
