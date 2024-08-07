@@ -45,6 +45,51 @@ def normalized_rmse(data, params, fn: Callable=exp_decay):
     return np.mean((y - data.data) ** 2)**0.5 / data.data.std()
 
 
+def calc_yscale_and_yoffset(data, fit_curve):
+    a = fit_curve
+    b = data
+    A = a.sum()
+    B = b.sum()
+    N = len(data)
+    yscale = ((a * b).sum() - (A * B) / N) / ((a ** 2).sum() - A ** 2 / N)
+    yoffset = (B - yscale * A) / N
+    return yscale, yoffset
+
+
+def test_tau(tau, x, y, std):
+    exp_y = exp_decay(x, tau=tau, yscale=1, yoffset=0)
+    yscale, yoffset = calc_yscale_and_yoffset(y, exp_y)
+    exp_y = exp_y * yscale + yoffset
+    err = ((exp_y - y) ** 2).mean()**0.5 / std
+    return yscale, yoffset, err, exp_y
+
+
+def exact_fit_exp(data, tau_init=None):
+    xoffset = data.t0
+    if tau_init is None:
+        tau_init = 0.5 * (data.time_values[-1] - xoffset)
+    memory = {}
+    std = data.data.std()
+
+    def err_fn(params):
+        τ = params[0]
+        if τ not in memory:
+            memory[τ] = test_tau(τ, data.time_values, data.data, std)
+        return memory[τ][2]
+
+    result = minimize(err_fn, tau_init, bounds=[(1e-9, None)], method='trust-constr')
+
+    tau = float(result.x[0])
+    yscale, yoffset, err, exp_y = memory[tau]
+    return {
+        'fit': (yoffset, yscale, tau),
+        'result': result,
+        'memory': memory,
+        'nrmse': err,
+        'model': lambda t: exp_decay(t, yoffset, yscale, tau, xoffset),
+    }
+
+
 def exp_fit(data: TSeries):
     initial_guess = estimate_exp_params(data)
     # offset, scale, tau
