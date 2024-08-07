@@ -37,7 +37,9 @@ def estimate_exp_params(data: TSeries):
     else:
         tau_i = len(cs) - np.searchsorted(cs[::-1], cs[-1] * 0.63)
     tau = data.time_values[min(tau_i, len(data)-1)] - data.time_values[0]
-    return yoffset, yscale, tau, data.t0
+    est = yoffset, yscale, tau, data.t0
+    assert np.all(np.isfinite(est))
+    return est
 
 
 def normalized_rmse(data, params, fn: Callable=exp_decay):
