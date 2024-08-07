@@ -44,7 +44,7 @@ def normalized_rmse(data, params, fn: Callable=exp_decay):
 
 def exp_fit(data):
     initial_guess = estimate_exp_params(data)
-    bounds = ([-np.inf, -np.inf, 0], [np.inf, np.inf, np.inf])
+    bounds = ([-np.inf, -np.inf, 0], [np.inf, np.inf, np.inf])  # yoffset, yscale, tau
     fit = scipy.optimize.curve_fit(
         f=functools.partial(exp_decay, xoffset=initial_guess[3]),
         xdata=data.time_values, 
