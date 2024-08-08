@@ -375,7 +375,15 @@ if __name__ == '__main__':
     pg.exec()
 
     failures = [
-        "dict(hold=-65*mV, pdur=10*ms, pamp=-120*mV, mode='vc', c_soma=80*pF, c_pip=3*pF, r_input=100*MOhm, r_access=100*MOhm)",
+        "dict(noise=10e-06, pamp=1.2e-11, pdur=0.2, mode='ic', r_access=5000000, r_input=103000000, c_soma=5e-11, c_pip=1e-11)",
+        "dict(noise=10e-06, pamp=-1.0999999999999999e-11, pdur=0.2, mode='ic', r_access=5000000, r_input=200000000, c_soma=5e-11, c_pip=1e-11)",
+        "dict(noise=10e-06, pamp=-1e-10, pdur=0.2, mode='ic', r_access=15000000, r_input=103000000, c_soma=5e-11, c_pip=1e-11)",
+        "dict(noise=10e-06, pamp=-1e-10, pdur=0.2, mode='ic', r_access=15000000, r_input=499000000, c_soma=5e-11, c_pip=1e-11)",
+        "dict(noise=10e-06, pamp=-1.0999999999999999e-11, pdur=0.2, mode='ic', r_access=15000000, r_input=499000000, c_soma=5e-11, c_pip=1e-11)",
+        "dict(noise=10e-06, pamp=1.2e-11, pdur=0.2, mode='ic', r_access=10000000, r_input=200000000, c_soma=1e-10, c_pip=1e-11)",
+        "dict(noise=0, pamp=-0.01, mode='vc', c_soma=False, c_pip=3e-12, r_input=False, r_access=10000000)",  # bath
+        "dict(pamp=-0.02, pdur=0.01, mode='vc', noise=0, c_soma=8e-11, c_pip=3e-12, r_input=100000000, r_access=100000000)",  # clogged pipette
+        "dict(noise=0, pamp=-0.01, mode='vc', c_soma=1e-13, c_pip=3e-12, r_input=1000000000, r_access=10000000)"  # attached
     ]
     for _kwds in failures:
         title = _kwds[5:-1]
