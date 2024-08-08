@@ -46,7 +46,7 @@ def normalized_rmse(data, params, fn: Callable=exp_decay):
     return np.mean((y - data.data) ** 2)**0.5 / data.data.std()
 
 
-def test_tau(tau, x, y, std):
+def best_exp_fit_for_tau(tau, x, y, std):
     exp_y = exp_decay(x, tau=tau, yscale=1, yoffset=0)
     yscale, yoffset = fit_scale_offset(y, exp_y)
     exp_y = exp_y * yscale + yoffset
@@ -65,7 +65,7 @@ def exact_fit_exp(data: TSeries):
     def err_fn(params):
         τ = params[0]
         if τ not in memory:
-            memory[τ] = test_tau(τ, data.time_values, data.data, std)
+            memory[τ] = best_exp_fit_for_tau(τ, data.time_values, data.data, std)
         return memory[τ][2]
 
     result = minimize(err_fn, tau_init, bounds=[(1e-9, None)], method='trust-constr')

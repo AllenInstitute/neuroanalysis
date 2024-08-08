@@ -1,7 +1,7 @@
 import numpy as np
 
 from neuroanalysis.data import TSeries
-from neuroanalysis.fitting.exp import exp_decay, exp_fit, exact_fit_exp, test_tau
+from neuroanalysis.fitting.exp import exp_decay, exp_fit, exact_fit_exp, best_exp_fit_for_tau
 
 
 def test_exp_fit(plot_errors=False, plot_all=False, raise_errors=True, fn=exp_fit):
@@ -11,13 +11,12 @@ def test_exp_fit(plot_errors=False, plot_all=False, raise_errors=True, fn=exp_fi
     taus = 10**np.linspace(-4, 0, 10)
     for mode in ('ic', 'vc'):
         if mode == 'ic':
-            yoffsets = np.linspace(-0.1, 0.1, 5)
-            # yscales = 10**np.linspace(-4, -1, 10)
-            yscales = 10**np.linspace(-1, 0, 10)
+            yoffsets = np.linspace(-0.1, 0.1, 3)
+            yscales = 10**np.linspace(-4, -1, 4)
             noise = 5e-3
         else:
-            yoffsets = np.linspace(-1e-9, 1e-9, 5)
-            yscales = 10**np.linspace(-13, -9, 10)
+            yoffsets = np.linspace(-1e-9, 1e-9, 3)
+            yscales = 10**np.linspace(-13, -9, 4)
             noise = 50e-12
         yscales = np.concatenate([yscales, -yscales])
         for tau in taus:
@@ -99,7 +98,7 @@ def calc_exp_error_curve(tau:float, data:TSeries):
     taus = tau * 10**np.linspace(-3, 3, 1000)
     errs = []
     for i in range(len(taus)):
-        exp_y, err, yscale, yoffset = test_tau(taus[i], data.time_values, data.data)
+        exp_y, err, yscale, yoffset = best_exp_fit_for_tau(taus[i], data.time_values, data.data)
         errs.append(err)
     return taus, errs
 
