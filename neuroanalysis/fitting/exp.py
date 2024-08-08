@@ -147,9 +147,9 @@ def double_exp_fit(data: TSeries, pulse_start: float):
 def fit_double_exp_decay(data: TSeries, pulse: TSeries, base_median: float, pulse_start: float, single_exp_model: Callable):
     prepulse_median = np.median(data.time_slice(pulse_start - 5e-3, pulse_start).data)
 
-    def double_exp_decay(t, yoffset, tau, xoffset):
-        amp = prepulse_median - yoffset
-        return exp_decay(t, yoffset, amp, tau, xoffset) + single_exp_model(t) - yoffset
+    def double_exp_decay(t, scale_guessing_aid, tau, xoffset):
+        yscale = prepulse_median - scale_guessing_aid
+        return exp_decay(t, 0, yscale, tau, xoffset) + single_exp_model(t)
 
     y0 = single_exp_model(pulse.t0)
     initial_guess = (
@@ -158,7 +158,7 @@ def fit_double_exp_decay(data: TSeries, pulse: TSeries, base_median: float, puls
         pulse_start,
     )
     bounds = tuple(zip(
-        sorted((y0 + y0 - base_median, base_median)),  # yoffset. y0 ± (y0 - base_median). sorted for clearer math.
+        sorted((y0 + y0 - base_median, base_median)),  # scale_guessing_aid. y0 ± (y0 - base_median). sorted for clearer math.
         (0, 200e-6),  # tau
         (pulse_start - 5e-6, pulse_start + 100e-6),  # xoffset
     ))
