@@ -66,7 +66,9 @@ def test_tau(tau, x, y, std):
 
 def exact_fit_exp(data: TSeries):
     xoffset = data.t0
-    tau_init = 0.5 * (data.time_values[-1] - xoffset)
+    data = data.copy()
+    data.t0 = 0
+    tau_init = 0.5 * (data.time_values[-1])
     memory = {}
     std = data.data.std()
 
