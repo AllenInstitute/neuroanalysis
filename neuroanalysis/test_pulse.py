@@ -5,7 +5,8 @@ import numpy as np
 import pyqtgraph as pg
 
 from .data import PatchClampRecording, TSeries
-from .fitting.exp import exp_fit, fit_double_exp_decay, fit_with_explicit_hessian, exp_decay, double_exp_fit
+from .fitting.exp import exp_fit, fit_double_exp_decay, fit_with_explicit_hessian, exp_decay, double_exp_fit, \
+    exact_fit_exp
 from .stimuli import find_square_pulses, SquarePulse
 
 
@@ -224,11 +225,12 @@ class PatchClampTestPulse(PatchClampRecording):
         # start by fitting the exponential decay from the post-pipette capacitance, ignoring initial transients
         main_fit_region = pulse.time_slice(pulse.t0 + 150e-6, None)
         self._main_fit_region = main_fit_region
-        self.main_fit_result = exp_fit(main_fit_region)
+        # self.main_fit_result = exp_fit(main_fit_region)
         # self.main_fit_result = fit_with_explicit_hessian(main_fit_region)
+        self.main_fit_result = exact_fit_exp(main_fit_region)
         main_fit_yoffset, main_fit_amp, main_fit_tau = self.main_fit_result['fit']
-        self.main_fit_trace = TSeries(self.main_fit_result['model'](pulse.time_values),
-                                      time_values=pulse.time_values)
+        self.main_fit_trace = TSeries(self.main_fit_result['model'](main_fit_region.time_values),
+                                      time_values=main_fit_region.time_values)
         # now fit with the initial transients included as an additional exponential decay
         try:
             self.fit_result_with_transient = fit_double_exp_decay(
@@ -237,13 +239,13 @@ class PatchClampTestPulse(PatchClampRecording):
 
             self.fit_trace_with_transient = TSeries(
                 self.fit_result_with_transient['model'](pulse.time_values), time_values=pulse.time_values)
-            self.initial_double_fit_trace = TSeries(
-                np.abs(self.fit_result_with_transient['model'](pulse.time_values))
-                - np.abs(self.main_fit_result['model'](pulse.time_values))
-                + base_median,
-                time_values=pulse.time_values)
             # self.initial_double_fit_trace = TSeries(
-            #     self.fit_result_with_transient['guessed_model'](pulse.time_values), time_values=pulse.time_values)
+            #     np.abs(self.fit_result_with_transient['model'](pulse.time_values))
+            #     - np.abs(self.main_fit_result['model'](pulse.time_values))
+            #     + base_median,
+            #     time_values=pulse.time_values)
+            self.initial_double_fit_trace = TSeries(
+                self.fit_result_with_transient['guessed_model'](pulse.time_values), time_values=pulse.time_values)
         except ValueError:
             initial_transient_curve_y = self.main_fit_result['model'](pulse.t0)
         return main_fit_amp, main_fit_tau, main_fit_yoffset, initial_transient_curve_y

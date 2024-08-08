@@ -143,7 +143,7 @@ def _make_ic_command(connection, amplitude, start, duration):
 
 def create_mock_test_pulse(
         start: float = 5*ms,
-        pdur: float = 10*ms,
+        pdur: float = 200*ms,
         pamp: float = -10*pA,
         hold: float = 0.0,
         rmp_soma: float = -65*mV,

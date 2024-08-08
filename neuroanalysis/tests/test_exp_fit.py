@@ -1,7 +1,7 @@
 import numpy as np
 
 from neuroanalysis.data import TSeries
-from neuroanalysis.fitting.exp import exp_decay, exp_fit, exact_fit_exp, fit_with_explicit_hessian, test_tau
+from neuroanalysis.fitting.exp import exp_decay, exp_fit, exact_fit_exp, test_tau
 
 
 def test_exp_fit(plot_errors=False, plot_all=False, raise_errors=True, fn=exp_fit):
@@ -14,13 +14,12 @@ def test_exp_fit(plot_errors=False, plot_all=False, raise_errors=True, fn=exp_fi
             yoffsets = np.linspace(-0.1, 0.1, 5)
             # yscales = 10**np.linspace(-4, -1, 10)
             yscales = 10**np.linspace(-1, 0, 10)
-            yscales = np.concatenate([yscales, -yscales])
             noise = 5e-3
         else:
             yoffsets = np.linspace(-1e-9, 1e-9, 5)
             yscales = 10**np.linspace(-13, -9, 10)
-            yscales = np.concatenate([yscales, -yscales])
             noise = 50e-12
+        yscales = np.concatenate([yscales, -yscales])
         for tau in taus:
             for yoffset in yoffsets:
                 for yscale in yscales:
@@ -35,7 +34,7 @@ def test_exp_fit(plot_errors=False, plot_all=False, raise_errors=True, fn=exp_fi
                     )
                     if plot_all:
                         plot_test_result(y, params, fit)
-                                        
+
                     try:
                         check_exp_fit(y, params, fit, noise)
                     except Exception:
@@ -46,7 +45,7 @@ def test_exp_fit(plot_errors=False, plot_all=False, raise_errors=True, fn=exp_fi
 
 
 def test_exact_fit_exp():
-    test_exp_fit(fn=exact_fit_exp)                
+    test_exp_fit(fn=exact_fit_exp)
 
 
 def test_bad_curve(plot=False):
@@ -59,19 +58,9 @@ def test_bad_curve(plot=False):
     duration = params['tau'] * 4
     t = np.linspace(0, duration, 1000)
     data = exp_decay(t, **params)
-    data += np.random.normal(0, 1e-12, data.shape)
+    data += np.random.normal(0, noise, data.shape)
     y = TSeries(data, time_values=t)
     fit = exp_fit(y)
-    fit, y = run_single_exp_fit(
-        duration=duration,
-        sample_rate=1000 / duration,
-        params=params,
-        noise=noise,
-        rng=np.random.RandomState(1234),
-        fit_func=exp_fit,
-    )
-
-    # fit = fit_with_explicit_hessian(y)
     if plot:
         plot_test_result(y, params, fit)
 

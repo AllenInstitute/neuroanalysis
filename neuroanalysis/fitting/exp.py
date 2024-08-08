@@ -6,9 +6,9 @@ import numpy as np
 import scipy.optimize
 from scipy.optimize import minimize
 
+from .fit_scale_offset import fit_scale_offset
 from .fitmodel import FitModel
 from ..data import TSeries
-from .fit_scale_offset import fit_scale_offset
 
 
 def exp_decay(t, yoffset, yscale, tau, xoffset=0):
@@ -38,14 +38,47 @@ def estimate_exp_params(data: TSeries):
     else:
         tau_i = len(cs) - np.searchsorted(cs[::-1], cs[-1] * 0.63)
     tau = data.time_values[min(tau_i, len(data)-1)] - data.time_values[0]
-    est = yoffset, yscale, tau, data.t0
-    assert np.all(np.isfinite(est))
-    return est
+    return yoffset, yscale, tau, data.t0
 
 
 def normalized_rmse(data, params, fn: Callable=exp_decay):
     y = fn(data.time_values, *params)
     return np.mean((y - data.data) ** 2)**0.5 / data.data.std()
+
+
+def test_tau(tau, x, y, std):
+    exp_y = exp_decay(x, tau=tau, yscale=1, yoffset=0)
+    yscale, yoffset = fit_scale_offset(y, exp_y)
+    exp_y = exp_y * yscale + yoffset
+    err = ((exp_y - y) ** 2).mean()**0.5 / std
+    return yscale, yoffset, err, exp_y
+
+
+def exact_fit_exp(data: TSeries):
+    xoffset = data.t0
+    data = data.copy()
+    data.t0 = 0
+    tau_init = 0.5 * (data.time_values[-1])
+    memory = {}
+    std = data.data.std()
+
+    def err_fn(params):
+        τ = params[0]
+        if τ not in memory:
+            memory[τ] = test_tau(τ, data.time_values, data.data, std)
+        return memory[τ][2]
+
+    result = minimize(err_fn, tau_init, bounds=[(1e-9, None)], method='trust-constr')
+
+    tau = float(result.x[0])
+    yscale, yoffset, err, exp_y = memory[tau]
+    return {
+        'fit': (yoffset, yscale, tau),
+        'result': result,
+        'memory': memory,
+        'nrmse': err,
+        'model': lambda t: exp_decay(t, yoffset, yscale, tau, xoffset),
+    }
 
 
 def exp_fit(data: TSeries):
@@ -72,38 +105,6 @@ def exp_fit(data: TSeries):
         'initial_guess': initial_guess,
         'model': model,
     }
-
-
-def test_tau(tau, x, y):
-    exp_y = exp_decay(x, tau=tau, yscale=1, yoffset=0)
-    yscale, yoffset = fit_scale_offset(y, exp_y)
-    exp_y = exp_y * yscale + yoffset
-    err = ((exp_y - y)**2).sum()
-    return exp_y, err, yscale, yoffset
-
-
-def exact_fit_exp(data, tau_init=None):
-    if tau_init is None:
-        tau_init = 0.5 * (data.time_values[-1] - data.t0)
-    # tau_init = estimate_tau_Šimurda(data, tau_init)
-    memory = {}
-    def err(params):        
-        tau = params[0]
-        if tau in memory:
-            return memory[tau][2]
-        exp_y, err, yscale, yoffset = test_tau(tau, data.time_values, data.data)
-        memory[tau] = (yscale, yoffset, err, exp_y)
-        return err
-    result = scipy.optimize.minimize(err, tau_init, 
-        bounds=[(1e-9, None)],
-        method='trust-constr',                                 
-    )
-    tau = float(result.x[0])
-    yscale, yoffset, err, exp_y = memory[tau]
-    nrmse = normalized_rmse(data, (yoffset, yscale, tau))
-    model_fn = functools.partial(exp_decay, yscale=yscale, yoffset=yoffset, tau=tau)
-    return {'fit': (yoffset, yscale, tau), 'result': result, 'memory': memory, 'nrmse': nrmse, 'model': model_fn}
-
 
 
 def double_exp_fit(data: TSeries, pulse_start: float):
