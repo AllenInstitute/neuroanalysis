@@ -1,7 +1,7 @@
 import numpy as np
 
 from neuroanalysis.data import TSeries
-from neuroanalysis.fitting.exp import exp_decay, exp_fit, exact_fit_exp, fit_with_explicit_hessian
+from neuroanalysis.fitting.exp import exp_decay, exp_fit, exact_fit_exp, fit_with_explicit_hessian, test_tau
 
 
 def test_exp_fit(plot_errors=False, plot_all=False, raise_errors=True, fn=exp_fit):
@@ -25,7 +25,6 @@ def test_exp_fit(plot_errors=False, plot_all=False, raise_errors=True, fn=exp_fi
             for yoffset in yoffsets:
                 for yscale in yscales:
                     params = {'yoffset': yoffset, 'yscale': yscale, 'tau': tau}
-                    print(mode, params)
                     fit, y = run_single_exp_fit(
                         duration=duration,
                         sample_rate=sample_rate,
@@ -100,22 +99,53 @@ def check_exp_fit(y, params, fit, noise):
     # assert fit['nrmse'] < 0.05, f"Error too big: {fit['nrmse']}"
     fit_y = fit['model'](y.time_values)
     target_y = exp_decay(y.time_values, **params)
-    assert (target_y - fit_y).std() < noise * 0.3
+    fit['err_std'] = (target_y - fit_y).std()
+    assert fit['err_std'] < noise * 0.3
     # assert np.allclose(fit['fit'], [params['yoffset'], params['yscale'], params['tau']], rtol=0.05)
 
 
+def calc_exp_error_curve(tau:float, data:TSeries):
+    """Calculate the error surface for an exponential with *tau* and noisy *data* 
+    """
+    taus = tau * 10**np.linspace(-3, 3, 1000)
+    errs = []
+    for i in range(len(taus)):
+        exp_y, err, yscale, yoffset = test_tau(taus[i], data.time_values, data.data)
+        errs.append(err)
+    return taus, errs
+
+
+plot_window = None
+
 def plot_test_result(y, params, fit):
+    global plot_window
     import pyqtgraph as pg
-    plt = pg.plot(y.time_values, y.data, pen='w', label='data')
-    plt.setTitle(f"tau: {params['tau']:0.2g} yoffset: {params['yoffset']:0.2g} yscale: {params['yscale']:0.2g} nrmse: {fit['nrmse']:0.2g}")
-    plt.plot(y.time_values, fit['model'](y.time_values), pen='r', label='fit')
+
+    if plot_window is None:
+        plot_window = pg.GraphicsLayoutWidget()
+        plot_window.plt1 = plot_window.addPlot(0, 0)
+        plot_window.plt2 = plot_window.addPlot(1, 0)
+
+    plt1 = plot_window.plt1
+    plt2 = plot_window.plt2
+
+    plt1 = pg.plot(y.time_values, y.data, pen='w', label='data')
+    plt1.setTitle(f"tau: {params['tau']:0.2g} yoffset: {params['yoffset']:0.2g} yscale: {params['yscale']:0.2g}"
+                 f" nrmse: {fit['nrmse']:0.2g} err_std: {fit['err_std']:0.2g}")
+    plt1.plot(y.time_values, fit['model'](y.time_values), pen='r', label='fit')
 
     target_y = exp_decay(y.time_values, **params)
-    plt.plot(y.time_values, target_y, pen='b', label='target')
-    plt.addLegend()
+    plt1.plot(y.time_values, target_y, pen='b', label='target')
+    plt1.addLegend()
+
+    taus, errs = calc_exp_error_curve(params['tau'], y)
+    plt2.plot(taus, errs)
+    plt2.addLine(x=params['tau'], pen='g')
+    plt2.addLine(x=fit['fit'][2], pen='r')
+    plt2.plot(list(fit['memory'].keys()), [m[2] for m in fit['memory'].values()], pen=None, symbol='o', symbolPen='r') 
     pg.exec()
 
 
 if __name__ == '__main__':
     # test_bad_curve(plot=True)
-    test_exp_fit(plot_all=False, plot_errors=True, raise_errors=False)
+    test_exp_fit(plot_all=False, plot_errors=True, raise_errors=False, fn=exact_fit_exp)
