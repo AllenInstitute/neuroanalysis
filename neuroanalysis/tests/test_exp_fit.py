@@ -1,10 +1,10 @@
 import numpy as np
 
 from neuroanalysis.data import TSeries
-from neuroanalysis.fitting.exp import exp_decay, exp_fit, fit_with_explicit_hessian
+from neuroanalysis.fitting.exp import exp_decay, exp_fit, exact_fit_exp, fit_with_explicit_hessian
 
 
-def test_exp_fit(plot=False, raise_errors=True):
+def test_exp_fit(plot_errors=False, plot_all=False, raise_errors=True, fn=exp_fit):
     rng = np.random.RandomState(0)
     duration = 0.1
     sample_rate = 50e3
@@ -12,7 +12,8 @@ def test_exp_fit(plot=False, raise_errors=True):
     for mode in ('ic', 'vc'):
         if mode == 'ic':
             yoffsets = np.linspace(-0.1, 0.1, 5)
-            yscales = 10**np.linspace(-4, -1, 10)
+            # yscales = 10**np.linspace(-4, -1, 10)
+            yscales = 10**np.linspace(-1, 0, 10)
             yscales = np.concatenate([yscales, -yscales])
             noise = 5e-3
         else:
@@ -20,27 +21,33 @@ def test_exp_fit(plot=False, raise_errors=True):
             yscales = 10**np.linspace(-13, -9, 10)
             yscales = np.concatenate([yscales, -yscales])
             noise = 50e-12
-    for tau in taus:
-        for yoffset in yoffsets:
-            for yscale in yscales:
-                params = {'yoffset': yoffset, 'yscale': yscale, 'tau': tau}
-                fit, y = run_single_exp_fit(
-                    duration=duration,
-                    sample_rate=sample_rate,
-                    params=params,
-                    noise=noise,
-                    rng=rng,
-                    fit_func=exp_fit,
-                )
-                try:
-                    check_exp_fit(y, params, fit, noise)
-                except Exception:
-                    if plot:
+        for tau in taus:
+            for yoffset in yoffsets:
+                for yscale in yscales:
+                    params = {'yoffset': yoffset, 'yscale': yscale, 'tau': tau}
+                    print(mode, params)
+                    fit, y = run_single_exp_fit(
+                        duration=duration,
+                        sample_rate=sample_rate,
+                        params=params,
+                        noise=noise,
+                        rng=rng,
+                        fit_func=fn,
+                    )
+                    if plot_all:
                         plot_test_result(y, params, fit)
-                    if raise_errors:
-                        raise
+                                        
+                    try:
+                        check_exp_fit(y, params, fit, noise)
+                    except Exception:
+                        if plot_errors and not plot_all:
+                            plot_test_result(y, params, fit)
+                        if raise_errors:
+                            raise
 
-                
+
+def test_exact_fit_exp():
+    test_exp_fit(fn=exact_fit_exp)                
 
 
 def test_bad_curve(plot=False):
@@ -99,12 +106,16 @@ def check_exp_fit(y, params, fit, noise):
 
 def plot_test_result(y, params, fit):
     import pyqtgraph as pg
-    plt = pg.plot(y.time_values, y.data, pen='w')
-    plt.setTitle(f"tau: {params['tau']:0.2g} yoffset: {params['yoffset']:0.2g} yscale: {params['yscale']:0.2g} nrmse: {fit['nrmse']}")
-    plt.plot(y.time_values, fit['model'](y.time_values), pen='r')
+    plt = pg.plot(y.time_values, y.data, pen='w', label='data')
+    plt.setTitle(f"tau: {params['tau']:0.2g} yoffset: {params['yoffset']:0.2g} yscale: {params['yscale']:0.2g} nrmse: {fit['nrmse']:0.2g}")
+    plt.plot(y.time_values, fit['model'](y.time_values), pen='r', label='fit')
+
+    target_y = exp_decay(y.time_values, **params)
+    plt.plot(y.time_values, target_y, pen='b', label='target')
+    plt.addLegend()
     pg.exec()
 
 
 if __name__ == '__main__':
     # test_bad_curve(plot=True)
-    test_exp_fit(plot=True, raise_errors=False)
+    test_exp_fit(plot_all=False, plot_errors=True, raise_errors=False)
