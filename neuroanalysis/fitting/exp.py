@@ -46,7 +46,35 @@ def normalized_rmse(data, params, fn: Callable=exp_decay):
     return np.mean((y - data.data) ** 2)**0.5 / data.data.std()
 
 
-def best_exp_fit_for_tau(tau, x, y, std):
+def best_exp_fit_for_tau(tau, x, y, std=None):
+    """Given a curve defined by x and y, find the yoffset and yscale that best fit 
+    an exponential decay with a fixed tau.
+
+    Parameters
+    ----------
+    tau : float
+        Decay time constant.
+    x : array
+        Time values.
+    y : array
+        Data values to fit.
+    std : float
+        Standard deviation of the data. If None, it is calculated from *y*.
+
+    Returns
+    -------
+    yscale : float
+        Y scaling factor for the exponential decay.
+    yoffset : float
+        Y offset for the exponential decay.
+    err : float
+        Normalized root mean squared error of the fit.
+    exp_y : array
+        The exponential decay curve that best fits the data.
+    
+    """
+    if std is None:
+        std = y.std()
     exp_y = exp_decay(x, tau=tau, yscale=1, yoffset=0)
     yscale, yoffset = fit_scale_offset(y, exp_y)
     exp_y = exp_y * yscale + yoffset
@@ -55,6 +83,11 @@ def best_exp_fit_for_tau(tau, x, y, std):
 
 
 def exact_fit_exp(data: TSeries):
+    """Fit *data* to an exponential decay.
+
+    This is a minimization of the normalized RMS error of the fit over the decay time constant.
+    Other parameters are determined exactly for each value of the decay time constant.
+    """
     xoffset = data.t0
     data = data.copy()
     data.t0 = 0
@@ -64,6 +97,7 @@ def exact_fit_exp(data: TSeries):
 
     def err_fn(params):
         τ = params[0]
+        # keep a record of all tau values visited and their corresponding fits
         if τ not in memory:
             memory[τ] = best_exp_fit_for_tau(τ, data.time_values, data.data, std)
         return memory[τ][2]
