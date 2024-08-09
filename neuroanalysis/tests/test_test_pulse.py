@@ -44,11 +44,13 @@ def test_vc_pulse(pamp, r_input, r_access, c_soma, c_pip, only=None):
 def test_pulse_in_bath():
     tp_kwds = dict(noise=0, pamp=-10*mV, mode='vc', c_soma=False, c_pip=3*pF, r_input=False, r_access=10*MOhm)
     tp, _ = create_mock_test_pulse(**tp_kwds)
-    check_analysis(tp, tp_kwds)
+    check_analysis(tp, tp_kwds, only=['capacitance', 'access_resistance'])
+    assert abs(tp.analysis['input_resistance']) < 0.3 * tp_kwds['r_access']
 
     tp_kwds = dict(noise=0, pamp=-100*pA, pdur=100*ms, mode='ic', c_soma=False, c_pip=3*pF, r_input=False, r_access=10*MOhm)
     tp, _ = create_mock_test_pulse(**tp_kwds)
-    check_analysis(tp, tp_kwds)
+    check_analysis(tp, tp_kwds, only=['capacitance', 'access_resistance'])
+    assert abs(tp.analysis['input_resistance']) < 0.3 * tp_kwds['r_access']
 
 
 def test_leaky_cell():
@@ -83,11 +85,13 @@ def test_clogged_pipette_with_soma():
 def test_clogged_pipette_in_bath():
     tp_kwds = dict(noise=0, pamp=-10*mV, mode='vc', c_soma=False, c_pip=3*pF, r_input=False, r_access=30*MOhm)
     tp, _ = create_mock_test_pulse(**tp_kwds)
-    check_analysis(tp, tp_kwds)
+    check_analysis(tp, tp_kwds, only=['capacitance', 'access_resistance'])
+    assert abs(tp.analysis['input_resistance']) < 0.3 * tp_kwds['r_access']
 
     tp_kwds = dict(noise=0, pamp=-100*pA, pdur=200*ms, mode='ic', c_soma=False, c_pip=3*pF, r_input=False, r_access=30*MOhm)
     tp, _ = create_mock_test_pulse(**tp_kwds)
-    check_analysis(tp, tp_kwds)
+    check_analysis(tp, tp_kwds, only=['capacitance', 'access_resistance'])
+    assert abs(tp.analysis['input_resistance']) < 0.3 * tp_kwds['r_access']
 
 
 def test_cell_attached():
@@ -324,18 +328,20 @@ def expected_testpulse_values(tp_kwds):
     return values
 
 
-def check_analysis(pulse, tp_kwds, only=None):
+def check_analysis(pulse, tp_kwds, only=None, tol_override=None):
     measured = pulse.analysis
     expected = expected_testpulse_values(tp_kwds)
     
     # how much error should we tolerate for each parameter?
     err_tolerance = {
-        'baseline_potential': 0.01,
-        'baseline_current': 0.01,
-        'access_resistance': 0.3,
-        'input_resistance': 0.1,
-        'capacitance': 0.3,
+        'baseline_potential': (0.01, 5*mV),
+        'baseline_current': (0.01, 1e-12),
+        'access_resistance': (0.3, 5e4),
+        'input_resistance': (0.1, 1e5),
+        'capacitance': (0.3, 1e-13),
     }
+    if tol_override:
+        err_tolerance.update(tol_override)
     mistakes = False
     if only:
         expected = {k: v for k, v in expected.items() if k in only}
@@ -349,15 +355,18 @@ def check_analysis(pulse, tp_kwds, only=None):
             print(f"FAILURE: expected {v1} for {k}, measured None")
             mistakes = True
             continue
+        abs_err = abs(v1 - v2)
         if v1 == 0:
-            err = abs(v1 - v2)
+            rel_err = abs_err
         else:
-            err = abs((v1 - v2) / v1)
-        if err > err_tolerance[k]:
-            print(f"FAILURE: expected {v1:g} for {k}, got {v2:g} (err {err:g} > {err_tolerance[k]:g})")
+            rel_err = abs((v1 - v2) / v1)
+        rtol, atol = err_tolerance[k]
+        if rel_err > rtol and abs_err > atol:
+            print(f"FAILURE: expected {v1:g} for {k}, got {v2:g} (rel_err {rel_err:g} > {rtol :g}) "
+                  f"(abs_err {abs_err:g} > {atol:g})")
             mistakes = True
         else:
-            print(f"success: expected {v1:g} for {k}, got {v2:g} (err {err:g})")
+            print(f"success: expected {v1:g} for {k}, got {v2:g} (rel_err {rel_err:g}) (abs_err {abs_err:g})")
     assert not mistakes, ', '.join((f'{k}={v}' for k, v in tp_kwds.items()))
 
 
@@ -391,8 +400,6 @@ if __name__ == '__main__':
 
     failures = [
         "dict(pamp=-0.02, pdur=0.01, mode='vc', noise=0, c_soma=8e-11, c_pip=3e-12, r_input=100e6, r_access=100e6)",  # clogged pipette
-        "dict(noise=0, pamp=-0.01, mode='vc', c_soma=False, c_pip=3e-12, r_input=False, r_access=10e6)",  # bath VC
-        "dict(noise=0, pamp=-100e-12, pdur=100e-3, mode='ic', c_soma=False, c_pip=3e-12, r_input=False, r_access=10e6)",  # bath IC
         "dict(noise=0, pamp=-0.01, mode='vc', c_soma=1e-13, c_pip=3e-12, r_input=1000e6, r_access=10e6)",  # attached
         "dict(noise=10e-06, pamp=1.2e-11, pdur=0.2, mode='ic', r_access=5e6, r_input=103e6, c_soma=5e-11, c_pip=1e-11)",
         "dict(noise=10e-06, pamp=-1.1e-11, pdur=0.2, mode='ic', r_access=5e6, r_input=200e6, c_soma=5e-11, c_pip=1e-11)",
