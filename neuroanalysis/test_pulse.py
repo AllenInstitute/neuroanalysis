@@ -165,7 +165,7 @@ class PatchClampTestPulse(PatchClampRecording):
         base_median = np.median(base.data)
         prepulse_median = np.median(data.time_slice(pulse_start-5e-3, pulse_start).data)
 
-        main_fit_amp, main_fit_tau, main_fit_yoffset, initial_transient_curve_y = self.two_pass_exp_fit(
+        main_fit_amp, main_fit_tau, main_fit_yoffset, fit_y0 = self.two_pass_exp_fit(
             base_median, data, pulse, pulse_start)
 
         # Handle analysis differently depending on clamp mode
@@ -194,18 +194,17 @@ class PatchClampTestPulse(PatchClampRecording):
             base_i = self._meta.get('holding_current')
             if base_i is None:
                 base_i = self['command'].data[0]
-            y0 = initial_transient_curve_y
-            
+
             if pulse_amp >= 0:
-                v_step = max(1e-5, main_fit_yoffset - y0)
+                v_step = max(1e-5, main_fit_yoffset - fit_y0)
             else:
-                v_step = min(-1e-5, main_fit_yoffset - y0)
+                v_step = min(-1e-5, main_fit_yoffset - fit_y0)
                 
             if pulse_amp == 0:
                 pulse_amp = 1e-14
                 
             input_r = (v_step / pulse_amp)
-            access_r = ((y0 - prepulse_median) / pulse_amp) + self.meta['bridge_balance']
+            access_r = ((fit_y0 - prepulse_median) / pulse_amp) + self.meta['bridge_balance']
             cap = main_fit_tau / input_r
 
         self._analysis = {
