@@ -1279,9 +1279,13 @@ class TSeries(Container):
         return self.copy(data=self.data / x)
 
     def __add__(self, x):
+        if isinstance(x, TSeries):
+            x = x.data
         return self.copy(data=self.data + x)
 
     def __sub__(self, x):
+        if isinstance(x, TSeries):
+            x = x.data
         return self.copy(data=self.data - x)
 
     def mean(self):
