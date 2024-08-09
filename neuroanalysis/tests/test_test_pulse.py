@@ -69,13 +69,23 @@ def test_with_12kHz_noise():
     assert False  # TODO
 
 
-def test_clogged_pipette():
-    shared_kwds = dict(noise=0, c_soma=80*pF, c_pip=3*pF, r_input=100*MOhm, r_access=100*MOhm)
+def test_clogged_pipette_with_soma():
+    shared_kwds = dict(noise=0, c_soma=80*pF, c_pip=3*pF, r_input=100*MOhm, r_access=50*MOhm)
+    tp_kwds = dict(pamp=-100*pA, pdur=200*ms, mode='ic', **shared_kwds)
+    tp, _ = create_mock_test_pulse(**tp_kwds)
+    check_analysis(tp, tp_kwds)
+
     tp_kwds = dict(pamp=-20*mV, pdur=10*ms, mode='vc', **shared_kwds)
     tp, _ = create_mock_test_pulse(**tp_kwds)
     check_analysis(tp, tp_kwds)
 
-    tp_kwds = dict(pamp=-100*pA, pdur=200*ms, mode='ic', **shared_kwds)
+
+def test_clogged_pipette_in_bath():
+    tp_kwds = dict(noise=0, pamp=-10*mV, mode='vc', c_soma=False, c_pip=3*pF, r_input=False, r_access=30*MOhm)
+    tp, _ = create_mock_test_pulse(**tp_kwds)
+    check_analysis(tp, tp_kwds)
+
+    tp_kwds = dict(noise=0, pamp=-100*pA, pdur=200*ms, mode='ic', c_soma=False, c_pip=3*pF, r_input=False, r_access=30*MOhm)
     tp, _ = create_mock_test_pulse(**tp_kwds)
     check_analysis(tp, tp_kwds)
 
@@ -173,6 +183,11 @@ def create_mock_test_pulse(
         pip_sections[-1].connect(soma(0.5), 1)
         for seg in soma:
             seg.pas.e = rmp_soma / mV
+    else:
+        # connect the pipette to ground
+        ground = h.VClamp(pip_sections[-1](1))
+        ground.dur[0] = 1e9  # clamp forever
+        ground.amp[0] = 0
 
     clamp_connection = pip_sections[0](0)
 
@@ -375,15 +390,16 @@ if __name__ == '__main__':
     pg.exec()
 
     failures = [
-        "dict(noise=10e-06, pamp=1.2e-11, pdur=0.2, mode='ic', r_access=5000000, r_input=103000000, c_soma=5e-11, c_pip=1e-11)",
-        "dict(noise=10e-06, pamp=-1.0999999999999999e-11, pdur=0.2, mode='ic', r_access=5000000, r_input=200000000, c_soma=5e-11, c_pip=1e-11)",
-        "dict(noise=10e-06, pamp=-1e-10, pdur=0.2, mode='ic', r_access=15000000, r_input=103000000, c_soma=5e-11, c_pip=1e-11)",
-        "dict(noise=10e-06, pamp=-1e-10, pdur=0.2, mode='ic', r_access=15000000, r_input=499000000, c_soma=5e-11, c_pip=1e-11)",
-        "dict(noise=10e-06, pamp=-1.0999999999999999e-11, pdur=0.2, mode='ic', r_access=15000000, r_input=499000000, c_soma=5e-11, c_pip=1e-11)",
-        "dict(noise=10e-06, pamp=1.2e-11, pdur=0.2, mode='ic', r_access=10000000, r_input=200000000, c_soma=1e-10, c_pip=1e-11)",
-        "dict(noise=0, pamp=-0.01, mode='vc', c_soma=False, c_pip=3e-12, r_input=False, r_access=10000000)",  # bath
-        "dict(pamp=-0.02, pdur=0.01, mode='vc', noise=0, c_soma=8e-11, c_pip=3e-12, r_input=100000000, r_access=100000000)",  # clogged pipette
-        "dict(noise=0, pamp=-0.01, mode='vc', c_soma=1e-13, c_pip=3e-12, r_input=1000000000, r_access=10000000)"  # attached
+        "dict(pamp=-0.02, pdur=0.01, mode='vc', noise=0, c_soma=8e-11, c_pip=3e-12, r_input=100e6, r_access=100e6)",  # clogged pipette
+        "dict(noise=0, pamp=-0.01, mode='vc', c_soma=False, c_pip=3e-12, r_input=False, r_access=10e6)",  # bath VC
+        "dict(noise=0, pamp=-100e-12, pdur=100e-3, mode='ic', c_soma=False, c_pip=3e-12, r_input=False, r_access=10e6)",  # bath IC
+        "dict(noise=0, pamp=-0.01, mode='vc', c_soma=1e-13, c_pip=3e-12, r_input=1000e6, r_access=10e6)",  # attached
+        "dict(noise=10e-06, pamp=1.2e-11, pdur=0.2, mode='ic', r_access=5e6, r_input=103e6, c_soma=5e-11, c_pip=1e-11)",
+        "dict(noise=10e-06, pamp=-1.1e-11, pdur=0.2, mode='ic', r_access=5e6, r_input=200e6, c_soma=5e-11, c_pip=1e-11)",
+        "dict(noise=10e-06, pamp=-1e-10, pdur=0.2, mode='ic', r_access=15e6, r_input=103e6, c_soma=5e-11, c_pip=1e-11)",
+        "dict(noise=10e-06, pamp=-1e-10, pdur=0.2, mode='ic', r_access=15e6, r_input=499e6, c_soma=5e-11, c_pip=1e-11)",
+        "dict(noise=10e-06, pamp=-1.1e-11, pdur=0.2, mode='ic', r_access=15e6, r_input=499e6, c_soma=5e-11, c_pip=1e-11)",
+        "dict(noise=10e-06, pamp=1.2e-11, pdur=0.2, mode='ic', r_access=10e6, r_input=200e6, c_soma=1e-10, c_pip=1e-11)",
     ]
     for _kwds in failures:
         title = _kwds[5:-1]
