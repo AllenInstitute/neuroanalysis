@@ -102,7 +102,11 @@ def exact_fit_exp(data: TSeries):
             memory[τ] = best_exp_fit_for_tau(τ, data.time_values, data.data, std)
         return memory[τ][2]
 
-    result = minimize(err_fn, tau_init, bounds=[(1e-9, None)], method='trust-constr')
+    result = minimize(
+        err_fn,
+        tau_init,
+        bounds=[(1e-9, None)],
+    )
 
     tau = float(result.x[0])
     yscale, yoffset, err, exp_y = memory[tau]
