@@ -54,8 +54,9 @@ def test_bad_curve(plot=False):
         'tau': 4e-3,
     }
     noise = 1e-12
-    duration = params['tau'] * 4
-    t = np.linspace(0, duration, 1000)
+    duration = params['tau'] * 5  # * 6 and this will pass
+    sample_rate = 1e5
+    t = np.linspace(0, duration, int(duration * sample_rate))
     data = exp_decay(t, **params)
     data += np.random.normal(0, noise, data.shape)
     y = TSeries(data, time_values=t)
@@ -92,7 +93,7 @@ def check_exp_fit(y, params, fit, noise):
     # assert np.allclose(fit['fit'], [params['yoffset'], params['yscale'], params['tau']], rtol=0.05)
 
 
-def calc_exp_error_curve(tau:float, data:TSeries):
+def calc_exp_error_curve(tau: float, data: TSeries):
     """Calculate the error surface for an exponential with *tau* and noisy *data* 
     """
     taus = tau * 10**np.linspace(-3, 3, 1000)
@@ -104,6 +105,7 @@ def calc_exp_error_curve(tau:float, data:TSeries):
 
 
 plot_window = None
+
 
 def plot_test_result(y, params, fit):
     global plot_window
@@ -118,8 +120,9 @@ def plot_test_result(y, params, fit):
     plt2 = plot_window.plt2
 
     plt1 = pg.plot(y.time_values, y.data, pen='w', label='data')
-    plt1.setTitle(f"tau: {params['tau']:0.2g} yoffset: {params['yoffset']:0.2g} yscale: {params['yscale']:0.2g}"
-                 f" nrmse: {fit['nrmse']:0.2g} err_std: {fit['err_std']:0.2g}")
+    plt1.setTitle(
+        f"tau: {params['tau']:0.2g} yoffset: {params['yoffset']:0.2g} yscale: {params['yscale']:0.2g}"
+        f" nrmse: {fit['nrmse']:0.2g} err_std: {fit['err_std']:0.2g}")
     plt1.plot(y.time_values, fit['model'](y.time_values), pen='r', label='fit')
 
     target_y = exp_decay(y.time_values, **params)
