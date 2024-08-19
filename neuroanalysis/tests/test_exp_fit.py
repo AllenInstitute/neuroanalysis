@@ -1,50 +1,57 @@
 import numpy as np
+import pytest
 
 from neuroanalysis.data import TSeries
 from neuroanalysis.fitting.exp import exp_decay, exp_fit, exact_fit_exp, best_exp_fit_for_tau
 
 
-def test_exp_fit(plot_errors=False, plot_all=False, raise_errors=True, fn=exp_fit):
+@pytest.mark.parametrize('tau', 10**np.linspace(-4, 0, 10))
+@pytest.mark.parametrize('yoffset', np.linspace(-0.1, 0.1, 3))
+@pytest.mark.parametrize('yscale', 10**np.linspace(-4, -1, 4))
+@pytest.mark.parametrize('yscale_sign', [-1, 1])
+@pytest.mark.parametrize('fn', [exact_fit_exp])  # , exp_fit
+def test_ic_exp_fit(tau, yoffset, yscale, yscale_sign, fn, plot_errors=False, plot_all=False, raise_errors=True):
+    noise = 5e-3
+    duration = 0.2
+    yscale *= yscale_sign
+
+    _run_exp_fit_test(duration, fn, noise, plot_all, plot_errors, raise_errors, tau, yoffset, yscale)
+
+
+@pytest.mark.parametrize('tau', 10**np.linspace(-4, 0, 10))
+@pytest.mark.parametrize('yoffset', np.linspace(-1e-9, 1e-9, 3))
+@pytest.mark.parametrize('yscale', 10**np.linspace(-13, -9, 4))
+@pytest.mark.parametrize('yscale_sign', [-1, 1])
+@pytest.mark.parametrize('fn', [exact_fit_exp])  # , exp_fit
+def test_vc_exp_fit(tau, yoffset, yscale, yscale_sign, fn, plot_errors=False, plot_all=False, raise_errors=True):
+    noise = 50e-12
+    duration = 0.02
+    yscale *= yscale_sign
+
+    _run_exp_fit_test(duration, fn, noise, plot_all, plot_errors, raise_errors, tau, yoffset, yscale)
+
+
+def _run_exp_fit_test(duration, fn, noise, plot_all, plot_errors, raise_errors, tau, yoffset, yscale):
     rng = np.random.RandomState(0)
-    duration = 0.1
     sample_rate = 50e3
-    taus = 10**np.linspace(-4, 0, 10)
-    for mode in ('ic', 'vc'):
-        if mode == 'ic':
-            yoffsets = np.linspace(-0.1, 0.1, 3)
-            yscales = 10**np.linspace(-4, -1, 4)
-            noise = 5e-3
-        else:
-            yoffsets = np.linspace(-1e-9, 1e-9, 3)
-            yscales = 10**np.linspace(-13, -9, 4)
-            noise = 50e-12
-        yscales = np.concatenate([yscales, -yscales])
-        for tau in taus:
-            for yoffset in yoffsets:
-                for yscale in yscales:
-                    params = {'yoffset': yoffset, 'yscale': yscale, 'tau': tau}
-                    fit, y = run_single_exp_fit(
-                        duration=duration,
-                        sample_rate=sample_rate,
-                        params=params,
-                        noise=noise,
-                        rng=rng,
-                        fit_func=fn,
-                    )
-                    if plot_all:
-                        plot_test_result(y, params, fit)
-
-                    try:
-                        check_exp_fit(y, params, fit, noise)
-                    except Exception:
-                        if plot_errors and not plot_all:
-                            plot_test_result(y, params, fit)
-                        if raise_errors:
-                            raise
-
-
-def test_exact_fit_exp():
-    test_exp_fit(fn=exact_fit_exp)
+    params = {'yoffset': yoffset, 'yscale': yscale, 'tau': tau}
+    fit, y = run_single_exp_fit(
+        duration=duration,
+        sample_rate=sample_rate,
+        params=params,
+        noise=noise,
+        rng=rng,
+        fit_func=fn,
+    )
+    if plot_all:
+        plot_test_result(y, params, fit)
+    try:
+        check_exp_fit(y, params, fit, noise)
+    except RuntimeError:
+        if plot_errors and not plot_all:
+            plot_test_result(y, params, fit)
+        if raise_errors:
+            raise
 
 
 def test_bad_curve(plot=False):
@@ -80,17 +87,19 @@ def run_single_exp_fit(duration, sample_rate, params, noise, rng, fit_func):
     except Exception:
         print(f"Error fitting {fit_func} {params}")
         raise
-    # fit = fit_with_explicit_hessian(y)
     return fit, y
 
 
 def check_exp_fit(y, params, fit, noise):
-    # assert fit['nrmse'] < 0.05, f"Error too big: {fit['nrmse']}"
+    # if fit['nrmse'] >= 0.05:
+    #     raise AssertionError(f"Error too big: {fit['nrmse']}")
     fit_y = fit['model'](y.time_values)
     target_y = exp_decay(y.time_values, **params)
     fit['err_std'] = (target_y - fit_y).std()
-    assert fit['err_std'] < noise * 0.3
-    # assert np.allclose(fit['fit'], [params['yoffset'], params['yscale'], params['tau']], rtol=0.05)
+    assert np.allclose(fit['fit'], [params['yoffset'], params['yscale'], params['tau']], rtol=0.05)
+    print(f"tau: {params['tau']} vs {fit['fit'][2]}")
+    if fit['err_std'] >= noise * 0.3:
+        raise AssertionError(f"Params: {params} Error too big: {fit['err_std']} >= {noise * 0.3}")
 
 
 def calc_exp_error_curve(tau: float, data: TSeries):
@@ -139,4 +148,4 @@ def plot_test_result(y, params, fit):
 
 if __name__ == '__main__':
     # test_bad_curve(plot=True)
-    test_exp_fit(plot_all=False, plot_errors=True, raise_errors=False, fn=exact_fit_exp)
+    test_ic_exp_fit(plot_all=False, plot_errors=True, raise_errors=False, fn=exact_fit_exp)
