@@ -170,7 +170,9 @@ class PatchClampTestPulse(PatchClampRecording):
 
         # Handle analysis differently depending on clamp mode
         if clamp_mode == 'vc':
-            base_v = self._meta.get('holding_potential', self['command'].data[0])
+            base_v = self._meta.get('holding_potential')
+            if base_v is None:
+                base_v = self['command'].data[0]
             base_i = base_median
             
             input_step = main_fit_yoffset - base_i
@@ -185,8 +187,8 @@ class PatchClampTestPulse(PatchClampRecording):
                 access_step = peak_rgn.data.min() - base_i
                 access_step = min(-1e-16, access_step)
 
-            access_r = pulse_amp / access_step
-            input_r = (pulse_amp / input_step) - access_r
+            access_r = pulse_amp / access_step  # pipette
+            input_r = (pulse_amp / input_step) - access_r  # soma
             cap = main_fit_tau * (1 / access_r + 1 / input_r)
 
         else:  # IC mode
@@ -203,8 +205,8 @@ class PatchClampTestPulse(PatchClampRecording):
             if pulse_amp == 0:
                 pulse_amp = 1e-14
                 
-            input_r = (v_step / pulse_amp)
-            access_r = ((fit_y0 - prepulse_median) / pulse_amp) + self.meta['bridge_balance']
+            input_r = v_step / pulse_amp  # soma
+            access_r = ((fit_y0 - prepulse_median) / pulse_amp) + self.meta['bridge_balance']  # pipette
             cap = main_fit_tau / input_r
 
         self._analysis = {
@@ -219,6 +221,20 @@ class PatchClampTestPulse(PatchClampRecording):
             'fit_amplitude': main_fit_amp,
             'baseline_potential': base_v,
             'baseline_current': base_i,
+        }
+
+    def _analysis_labels(self):
+        return {
+            'steady_state_resistance': ('Ω', 'Rss'),
+            'input_resistance': ('Ω', 'Ri'),
+            'access_resistance': ('Ω', 'Ra'),
+            'capacitance': ('F', 'C'),
+            'time_constant': ('s', 'τ'),
+            'fit_yoffset': (self.plot_units, 'Yo'),
+            'fit_xoffset': ('s', 'Xo'),
+            'fit_amplitude': ('', 'Ys'),
+            'baseline_potential': ('V', 'Vh'),
+            'baseline_current': ('A', 'Ih'),
         }
 
     def two_pass_exp_fit(self, base_median, data, pulse, pulse_start):
@@ -270,14 +286,35 @@ class PatchClampTestPulse(PatchClampRecording):
     def plot_title(self):
         return 'current' if self.clamp_mode == 'vc' else 'potential'
 
-    def plot(self):
+    def plot(self, plt=None, label=True):
         assert self.analysis is not None
-        plt = pg.plot(labels={'left': (self.plot_title, self.plot_units), 'bottom': ('time', 's')})
-        plt.addLegend()
+        if plt is None:
+            plt = pg.plot(labels={'left': (self.plot_title, self.plot_units), 'bottom': ('time', 's')})
+            plt.addLegend()
         plt.plot(self['primary'].time_values, self['primary'].data, name="raw")
         if self.fit_trace_with_transient is not None:
             plt.plot(self.fit_trace_with_transient.time_values, self.fit_trace_with_transient.data, pen='b', name="fit w/ trans")
         if self.initial_double_fit_trace is not None:
             plt.plot(self.initial_double_fit_trace.time_values, self.initial_double_fit_trace.data, pen='g', name="initial double fit")
         plt.plot(self.main_fit_trace.time_values, self.main_fit_trace.data, pen='r', name="first fit")
+        if label:
+            self.label_for_plot(plt)
         return plt
+
+    def label_for_plot(self, plt):
+        asymptote = self.analysis['fit_yoffset']
+        plt.addItem(pg.InfiniteLine(
+            (0, asymptote),
+            angle=0,
+            pen=pg.mkPen((180, 180, 240), dash=[3, 4]),
+        ))
+        abbrevs = self._analysis_labels()
+        text = "Estimated:<br/>" + "<br/>".join([
+            f"{abbrevs[key][1]}: {pg.siFormat(val, suffix=abbrevs[key][0])}"
+            for key, val in self.analysis.items()
+            if val is not None and key in abbrevs
+        ])
+        label = pg.LabelItem(text.strip(), color=(180, 180, 240))
+        label.setParentItem(plt.vb)
+        label.setPos(5, 5)
+        return label
