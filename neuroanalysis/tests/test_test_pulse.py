@@ -48,13 +48,13 @@ def test_pulse_in_bath():
     tp_kwds = dict(noise=0, pamp=-10*mV, mode='vc', c_soma=False, c_pip=3*pF, r_input=False, r_access=10*MOhm)
     tp, _ = create_mock_test_pulse(**tp_kwds)
     check_analysis(tp, tp_kwds, only=['access_resistance'])
-    assert tp.analysis['capacitance'] == float('nan')
+    assert np.isnan(tp.analysis['capacitance'])
     assert abs(tp.analysis['input_resistance']) < 0.3 * tp_kwds['r_access']
 
     tp_kwds = dict(noise=0, pamp=-100*pA, pdur=100*ms, mode='ic', c_soma=False, c_pip=3*pF, r_input=False, r_access=10*MOhm)
     tp, _ = create_mock_test_pulse(**tp_kwds)
     check_analysis(tp, tp_kwds, only=['access_resistance'])
-    assert tp.analysis['capacitance'] == float('nan')
+    assert np.isnan(tp.analysis['capacitance'])
     assert abs(tp.analysis['input_resistance']) < 0.3 * tp_kwds['r_access']
 
 
@@ -395,8 +395,8 @@ def test_bath_ugly():
     assert len(tps) == 1
     tp = tps.at_time(float('inf'))
     assert tp.analysis
-    assert tp.analysis['capacitance'] == float('nan')
-    check_analysis(tp, None, only=['steady_state_resistance'])
+    assert np.isnan(tp.analysis['capacitance'])
+    assert tp.analysis['steady_state_resistance'] < 10e6
 
 
 if __name__ == '__main__':

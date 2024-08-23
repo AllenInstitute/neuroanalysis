@@ -82,6 +82,18 @@ def best_exp_fit_for_tau(tau, x, y, std=None):
     return yscale, yoffset, err, exp_y
 
 
+def quantify_confidence(memory: dict) -> float:
+    """
+    Given a run of best_exp_fit_for_tau, quantify the confidence in the fit.
+    """
+    errs = np.array([v[3] for v in memory.values()])
+    std = errs.std()
+    n = len(errs)
+    data_range = errs.max() - errs.min()
+    max_std = max_std_dev = (data_range / 2) * np.sqrt((n - 1) / n)
+    return 1 - std / max_std
+
+
 def exact_fit_exp(data: TSeries):
     """Fit *data* to an exponential decay.
 
@@ -115,6 +127,7 @@ def exact_fit_exp(data: TSeries):
         'result': result,
         'memory': memory,
         'nrmse': err,
+        'confidence': quantify_confidence(memory),
         'model': lambda t: exp_decay(t, yoffset, yscale, tau, xoffset),
     }
 

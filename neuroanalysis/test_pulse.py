@@ -11,6 +11,10 @@ from .fitting.exp import exp_fit, fit_double_exp_decay, fit_with_explicit_hessia
 from .stimuli import find_square_pulses, SquarePulse
 
 
+class LowConfidenceFitError(Exception):
+    pass
+
+
 class PatchClampTestPulse(PatchClampRecording):
     """A PatchClampRecording that contains a subthreshold, square pulse stimulus.
     """
@@ -165,8 +169,13 @@ class PatchClampTestPulse(PatchClampRecording):
         base_median = np.median(base.data)
         prepulse_median = np.median(data.time_slice(pulse_start-5e-3, pulse_start).data)
 
-        main_fit_amp, main_fit_tau, main_fit_yoffset, fit_y0 = self.two_pass_exp_fit(
-            base_median, data, pulse, pulse_start)
+        try:
+            main_fit_amp, main_fit_tau, main_fit_yoffset, fit_y0 = self.two_pass_exp_fit(
+                base_median, data, pulse, pulse_start)
+        except LowConfidenceFitError:
+            main_fit_tau = float('nan')
+            fit_y0 = prepulse_median
+            main_fit_amp, main_fit_yoffset,  = self.bath_fit(base_median, pulse)
 
         # Handle analysis differently depending on clamp mode
         if clamp_mode == 'vc':
@@ -256,7 +265,18 @@ class PatchClampTestPulse(PatchClampRecording):
                 self.fit_result_with_transient['model'](pulse.time_values) + self.main_fit_result['model'](pulse.time_values),
                 time_values=pulse.time_values,
             )
+        print("Confidence:", self.main_fit_result['confidence'])
+        if self.main_fit_result['confidence'] < 0.43:
+            raise LowConfidenceFitError(self.main_fit_result['confidence'])
         return main_fit_amp, main_fit_tau, main_fit_yoffset, y0
+
+    def bath_fit(self, base_median, pulse):
+        # no cell, no non-transient exponential decay, just ohm's law.
+        start_y = base_median
+        end_y = pulse.data[-len(pulse.data) // 100:].mean()
+        yscale = start_y - end_y
+        yoffset = end_y
+        return yscale, yoffset
 
     def one_pass_exp_fit(self, base_median, data, pulse, pulse_start):
         fit_result = double_exp_fit(pulse, pulse_start)
