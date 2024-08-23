@@ -1,3 +1,6 @@
+import os
+
+import h5py
 from typing import Literal
 
 import numpy as np
@@ -44,12 +47,14 @@ def test_vc_pulse(pamp, r_input, r_access, c_soma, c_pip, only=None):
 def test_pulse_in_bath():
     tp_kwds = dict(noise=0, pamp=-10*mV, mode='vc', c_soma=False, c_pip=3*pF, r_input=False, r_access=10*MOhm)
     tp, _ = create_mock_test_pulse(**tp_kwds)
-    check_analysis(tp, tp_kwds, only=['capacitance', 'access_resistance'])
+    check_analysis(tp, tp_kwds, only=['access_resistance'])
+    assert tp.analysis['capacitance'] == float('nan')
     assert abs(tp.analysis['input_resistance']) < 0.3 * tp_kwds['r_access']
 
     tp_kwds = dict(noise=0, pamp=-100*pA, pdur=100*ms, mode='ic', c_soma=False, c_pip=3*pF, r_input=False, r_access=10*MOhm)
     tp, _ = create_mock_test_pulse(**tp_kwds)
-    check_analysis(tp, tp_kwds, only=['capacitance', 'access_resistance'])
+    check_analysis(tp, tp_kwds, only=['access_resistance'])
+    assert tp.analysis['capacitance'] == float('nan')
     assert abs(tp.analysis['input_resistance']) < 0.3 * tp_kwds['r_access']
 
 
@@ -378,6 +383,20 @@ def test_load():
             assert np.allclose(v, new_tp.analysis[k])
         else:
             assert v == new_tp.analysis[k]
+
+
+def test_bath_ugly():
+    from neuroanalysis.test_pulse_stack import H5BackedTestPulseStack
+
+    fn = os.path.join(os.path.dirname(__file__), 'bath-ugly.h5')
+    print(fn)
+    f = h5py.File(fn, 'r')
+    tps = H5BackedTestPulseStack(f['test_pulses'])
+    assert len(tps) == 1
+    tp = tps.at_time(float('inf'))
+    assert tp.analysis
+    assert tp.analysis['capacitance'] == float('nan')
+    check_analysis(tp, None, only=['steady_state_resistance'])
 
 
 if __name__ == '__main__':

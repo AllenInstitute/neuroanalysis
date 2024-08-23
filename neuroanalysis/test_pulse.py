@@ -228,11 +228,11 @@ class PatchClampTestPulse(PatchClampRecording):
             'steady_state_resistance': ('Ω', 'Rss'),
             'input_resistance': ('Ω', 'Ri'),
             'access_resistance': ('Ω', 'Ra'),
-            'capacitance': ('F', 'C'),
+            'capacitance': ('F', 'Cm'),
             'time_constant': ('s', 'τ'),
             'fit_yoffset': (self.plot_units, 'Yo'),
             'fit_xoffset': ('s', 'Xo'),
-            'fit_amplitude': ('', 'Ys'),
+            'fit_amplitude': ('', 'Ya'),
             'baseline_potential': ('V', 'Vh'),
             'baseline_current': ('A', 'Ih'),
         }
@@ -241,33 +241,21 @@ class PatchClampTestPulse(PatchClampRecording):
         # start by fitting the exponential decay from the post-pipette capacitance, ignoring initial transients
         main_fit_region = pulse.time_slice(pulse.t0 + 150e-6, None)
         self._main_fit_region = main_fit_region
-        # self.main_fit_result = exp_fit(main_fit_region)
-        # self.main_fit_result = fit_with_explicit_hessian(main_fit_region)
         self.main_fit_result = exact_fit_exp(main_fit_region)
         main_fit_yoffset, main_fit_amp, main_fit_tau = self.main_fit_result['fit']
         self.main_fit_trace = TSeries(self.main_fit_result['model'](main_fit_region.time_values),
                                       time_values=main_fit_region.time_values)
         y0 = self.main_fit_result['model'](pulse.t0)
-        # TODO doing anything with this transient fit doesn't help pass any tests, and in fact causes a bunch of failures
-        # now fit with the initial transients included as an additional exponential decay
+        # TODO doing anything with this transient fit doesn't help pass any tests, and in fact causes a
+        #  bunch of failures. not returning any of this for now, but it does plot well.
         with contextlib.suppress(ValueError):
-            # self.fit_result_with_transient = fit_double_exp_decay(
-            #     data, pulse, base_median, pulse_start, self.main_fit_result['model'])
-            # initial_transient_curve_y = self.fit_result_with_transient['fit'][0]
+            # now fit with the access transients included as an additional exponential decay
             self.fit_result_with_transient = exact_fit_exp(pulse - self.main_fit_result['model'](pulse.time_values))
-        #     initial_transient_curve_y += self.fit_result_with_transient['model'](pulse.t0)
 
             self.fit_trace_with_transient = TSeries(
                 self.fit_result_with_transient['model'](pulse.time_values) + self.main_fit_result['model'](pulse.time_values),
                 time_values=pulse.time_values,
             )
-        #     # self.initial_double_fit_trace = TSeries(
-        #     #     np.abs(self.fit_result_with_transient['model'](pulse.time_values))
-        #     #     - np.abs(self.main_fit_result['model'](pulse.time_values))
-        #     #     + base_median,
-        #     #     time_values=pulse.time_values)
-        #     # self.initial_double_fit_trace = TSeries(
-        #     #     self.fit_result_with_transient['guessed_model'](pulse.time_values), time_values=pulse.time_values)
         return main_fit_amp, main_fit_tau, main_fit_yoffset, y0
 
     def one_pass_exp_fit(self, base_median, data, pulse, pulse_start):
