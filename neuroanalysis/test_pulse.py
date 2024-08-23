@@ -257,13 +257,13 @@ class PatchClampTestPulse(PatchClampRecording):
         #  bunch of failures. not returning any of this for now, but it does plot well.
         with contextlib.suppress(ValueError):
             # now fit with the access transients included as an additional exponential decay
-            self.fit_result_with_transient = exact_fit_exp(pulse - self.main_fit_result['model'](pulse.time_values))
+            prediction = self.main_fit_result['model'](pulse.time_values)
+            self.fit_result_with_transient = exact_fit_exp(pulse - prediction)
 
             self.fit_trace_with_transient = TSeries(
-                self.fit_result_with_transient['model'](pulse.time_values) + self.main_fit_result['model'](pulse.time_values),
+                self.fit_result_with_transient['model'](pulse.time_values) + prediction,
                 time_values=pulse.time_values,
             )
-        print("Confidence:", self.main_fit_result['confidence'])
         if self.main_fit_result['confidence'] < 0.45:
             raise LowConfidenceFitError(self.main_fit_result['confidence'])
         return main_fit_amp, main_fit_tau, main_fit_yoffset, y0
