@@ -173,9 +173,7 @@ class PatchClampTestPulse(PatchClampRecording):
             main_fit_amp, main_fit_tau, main_fit_yoffset, fit_y0 = self.two_pass_exp_fit(
                 base_median, data, pulse, pulse_start)
         except LowConfidenceFitError:
-            main_fit_tau = float('nan')
-            fit_y0 = prepulse_median
-            main_fit_amp, main_fit_yoffset,  = self.bath_fit(base_median, pulse)
+            main_fit_amp, main_fit_tau, main_fit_yoffset, fit_y0 = self.bath_fit(base_median, pulse)
 
         # Handle analysis differently depending on clamp mode
         if clamp_mode == 'vc':
@@ -266,7 +264,7 @@ class PatchClampTestPulse(PatchClampRecording):
                 time_values=pulse.time_values,
             )
         print("Confidence:", self.main_fit_result['confidence'])
-        if self.main_fit_result['confidence'] < 0.43:
+        if self.main_fit_result['confidence'] < 0.45:
             raise LowConfidenceFitError(self.main_fit_result['confidence'])
         return main_fit_amp, main_fit_tau, main_fit_yoffset, y0
 
@@ -276,7 +274,9 @@ class PatchClampTestPulse(PatchClampRecording):
         end_y = pulse.data[-len(pulse.data) // 100:].mean()
         yscale = start_y - end_y
         yoffset = end_y
-        return yscale, yoffset
+        tau = float('nan')
+        y0 = base_median
+        return yscale, tau, yoffset, y0
 
     def one_pass_exp_fit(self, base_median, data, pulse, pulse_start):
         fit_result = double_exp_fit(pulse, pulse_start)
