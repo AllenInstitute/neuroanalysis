@@ -124,28 +124,30 @@ def plot_test_result(y, params, fit):
         plot_window = pg.GraphicsLayoutWidget()
         plot_window.plt1 = plot_window.addPlot(0, 0)
         plot_window.plt2 = plot_window.addPlot(1, 0)
+    plot_window.show()
 
     plt1 = plot_window.plt1
+    plt1.addLegend()
     plt2 = plot_window.plt2
 
-    plt1 = pg.plot(y.time_values, y.data, pen='w', label='data')
+    plt1.plot(y.time_values, y.data, pen='w', label='data', name='data')
     plt1.setTitle(
         f"tau: {params['tau']:0.2g} yoffset: {params['yoffset']:0.2g} yscale: {params['yscale']:0.2g}"
-        f" nrmse: {fit['nrmse']:0.2g} err_std: {fit['err_std']:0.2g}")
-    plt1.plot(y.time_values, fit['model'](y.time_values), pen='r', label='fit')
+        f" nrmse: {fit['nrmse']:0.2g}")  # err_std: {fit['err_std']:0.2g}")
+    plt1.plot(y.time_values, fit['model'](y.time_values), pen='r', label='fit', name='fit')
 
     target_y = exp_decay(y.time_values, **params)
-    plt1.plot(y.time_values, target_y, pen='b', label='target')
-    plt1.addLegend()
+    plt1.plot(y.time_values, target_y, pen='b', label='target', name='target')
 
     taus, errs = calc_exp_error_curve(params['tau'], y)
     plt2.plot(taus, errs)
     plt2.addLine(x=params['tau'], pen='g')
     plt2.addLine(x=fit['fit'][2], pen='r')
-    plt2.plot(list(fit['memory'].keys()), [m[2] for m in fit['memory'].values()], pen=None, symbol='o', symbolPen='r') 
+    if 'memory' in fit:
+        plt2.plot(list(fit['memory'].keys()), [m[2] for m in fit['memory'].values()], pen=None, symbol='o', symbolPen='r')
     pg.exec()
 
 
 if __name__ == '__main__':
-    # test_bad_curve(plot=True)
-    test_ic_exp_fit(plot_all=False, plot_errors=True, raise_errors=False, fn=exact_fit_exp)
+    test_bad_curve(plot=True)
+    # test_ic_exp_fit(plot_all=False, plot_errors=True, raise_errors=False, fn=exact_fit_exp)
