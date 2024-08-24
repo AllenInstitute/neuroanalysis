@@ -82,16 +82,30 @@ def best_exp_fit_for_tau(tau, x, y, std=None):
     return yscale, yoffset, err, exp_y
 
 
-def quantify_confidence(memory: dict) -> float:
+def quantify_confidence(tau: float, memory: dict, data: TSeries) -> float:
     """
     Given a run of best_exp_fit_for_tau, quantify the confidence in the fit.
     """
-    errs = np.array([v[3] for v in memory.values()])
-    std = errs.std()
-    n = len(errs)
-    data_range = errs.max() - errs.min()
-    max_std = max_std_dev = (data_range / 2) * np.sqrt((n - 1) / n)
-    return 1 - std / max_std
+    # errs = np.array([v[2] for v in memory.values()])
+    # std = errs.std()
+    # n = len(errs)
+    # data_range = errs.max() - errs.min()
+    # max_std = (data_range / 2) * np.sqrt((n - 1) / n)
+    # poor_variation = 1 - std / max_std
+
+    y = data.data
+    x = data.time_values
+    err = memory[tau][2]
+    scale, offset = np.polyfit(x, y, 1)
+    linear_y = scale * x + offset
+    linear_err = ((linear_y - y) ** 2).mean()**0.5 / y.std()
+    exp_like = 1 / (1 + err / linear_err)
+    exp_like = max(0, exp_like - 0.5) * 2
+
+    # pv_factor = 1
+    # el_factor = 4
+    # return ((poor_variation ** pv_factor) * (exp_like ** el_factor)) ** (1 / (pv_factor + el_factor))
+    return exp_like
 
 
 def exact_fit_exp(data: TSeries):
@@ -127,7 +141,7 @@ def exact_fit_exp(data: TSeries):
         'result': result,
         'memory': memory,
         'nrmse': err,
-        'confidence': quantify_confidence(memory),
+        'confidence': quantify_confidence(tau, memory, data),
         'model': lambda t: exp_decay(t, yoffset, yscale, tau, xoffset),
     }
 

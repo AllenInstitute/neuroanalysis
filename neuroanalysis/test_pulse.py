@@ -264,7 +264,7 @@ class PatchClampTestPulse(PatchClampRecording):
                 self.fit_result_with_transient['model'](pulse.time_values) + prediction,
                 time_values=pulse.time_values,
             )
-        if self.main_fit_result['confidence'] < 0.45:
+        if self.main_fit_result['confidence'] < 0.10:
             raise LowConfidenceFitError(self.main_fit_result['confidence'])
         return main_fit_amp, main_fit_tau, main_fit_yoffset, y0
 
