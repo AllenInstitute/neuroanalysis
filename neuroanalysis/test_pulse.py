@@ -264,7 +264,7 @@ class PatchClampTestPulse(PatchClampRecording):
                 self.fit_result_with_transient['model'](pulse.time_values) + prediction,
                 time_values=pulse.time_values,
             )
-        if self.main_fit_result['confidence'] < 0.10:
+        if self.main_fit_result['confidence'] < 0.15:
             raise LowConfidenceFitError(self.main_fit_result['confidence'])
         return main_fit_amp, main_fit_tau, main_fit_yoffset, y0
 
@@ -306,7 +306,7 @@ class PatchClampTestPulse(PatchClampRecording):
             plt.plot(self.initial_double_fit_trace.time_values, self.initial_double_fit_trace.data, pen='g', name="initial double fit")
         plt.plot(self.main_fit_trace.time_values, self.main_fit_trace.data, pen='r', name="first fit")
         if label:
-            self.label_for_plot(plt)
+            self.label_for_plot(plt.getPlotItem())
         return plt
 
     def label_for_plot(self, plt):

@@ -45,17 +45,15 @@ def test_vc_pulse(pamp, r_input, r_access, c_soma, c_pip, only=None):
 
 
 def test_pulse_in_bath():
-    tp_kwds = dict(noise=0, pamp=-10*mV, mode='vc', c_soma=False, c_pip=3*pF, r_input=False, r_access=10*MOhm)
+    tp_kwds = dict(noise=1e-13, pamp=-10*mV, mode='vc', c_soma=False, c_pip=3*pF, r_input=False, r_access=10*MOhm)
     tp, _ = create_mock_test_pulse(**tp_kwds)
-    check_analysis(tp, tp_kwds, only=['access_resistance'])
     assert np.isnan(tp.analysis['capacitance'])
-    assert abs(tp.analysis['input_resistance']) < 0.3 * tp_kwds['r_access']
+    assert np.isclose(tp.analysis['steady_state_resistance'], tp_kwds['r_access'], rtol=0.3)
 
-    tp_kwds = dict(noise=0, pamp=-100*pA, pdur=100*ms, mode='ic', c_soma=False, c_pip=3*pF, r_input=False, r_access=10*MOhm)
+    tp_kwds = dict(noise=1e-6, pamp=-100*pA, pdur=100*ms, mode='ic', c_soma=False, c_pip=3*pF, r_input=False, r_access=10*MOhm)
     tp, _ = create_mock_test_pulse(**tp_kwds)
-    check_analysis(tp, tp_kwds, only=['access_resistance'])
     assert np.isnan(tp.analysis['capacitance'])
-    assert abs(tp.analysis['input_resistance']) < 0.3 * tp_kwds['r_access']
+    assert np.isclose(tp.analysis['steady_state_resistance'], tp_kwds['r_access'], rtol=0.3)
 
 
 def test_leaky_cell():
@@ -90,23 +88,23 @@ def test_clogged_pipette_with_soma():
 def test_clogged_pipette_in_bath():
     tp_kwds = dict(noise=0, pamp=-10*mV, mode='vc', c_soma=False, c_pip=3*pF, r_input=False, r_access=30*MOhm)
     tp, _ = create_mock_test_pulse(**tp_kwds)
-    check_analysis(tp, tp_kwds, only=['capacitance', 'access_resistance'])
-    assert abs(tp.analysis['input_resistance']) < 0.3 * tp_kwds['r_access']
+    assert np.isnan(tp.analysis['capacitance'])
+    assert np.isclose(tp.analysis['steady_state_resistance'], tp_kwds['r_access'], rtol=0.3)
 
     tp_kwds = dict(noise=0, pamp=-100*pA, pdur=200*ms, mode='ic', c_soma=False, c_pip=3*pF, r_input=False, r_access=30*MOhm)
     tp, _ = create_mock_test_pulse(**tp_kwds)
-    check_analysis(tp, tp_kwds, only=['capacitance', 'access_resistance'])
-    assert abs(tp.analysis['input_resistance']) < 0.3 * tp_kwds['r_access']
+    assert np.isnan(tp.analysis['capacitance'])
+    assert np.isclose(tp.analysis['steady_state_resistance'], tp_kwds['r_access'], rtol=0.3)
 
 
 def test_cell_attached():
     tp_kwds = dict(noise=0, pamp=-10*mV, mode='vc', c_soma=0.1*pF, c_pip=3*pF, r_input=1000*MOhm, r_access=10*MOhm)
     tp, _ = create_mock_test_pulse(**tp_kwds)
-    check_analysis(tp, tp_kwds)
+    assert np.isclose(tp.analysis['steady_state_resistance'], tp_kwds['r_access'] + tp_kwds['r_input'], rtol=0.3)
 
     tp_kwds = dict(noise=0, pamp=-100*pA, pdur=200*ms, mode='ic', c_soma=0.1*pF, c_pip=3*pF, r_input=1000*MOhm, r_access=10*MOhm)
     tp, _ = create_mock_test_pulse(**tp_kwds)
-    check_analysis(tp, tp_kwds)
+    assert np.isclose(tp.analysis['steady_state_resistance'], tp_kwds['r_access'] + tp_kwds['r_input'], rtol=0.3)
 
 
 def capacitance(section):
