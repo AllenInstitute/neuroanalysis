@@ -1,14 +1,10 @@
+import contextlib
+import numpy as np
 import warnings
 
-import contextlib
-import functools
-
-import numpy as np
-
 import pyqtgraph as pg
-
 from .data import PatchClampRecording, TSeries
-from .fitting.exp import exp_fit, fit_double_exp_decay, fit_with_explicit_hessian, exp_decay, double_exp_fit, \
+from .fitting.exp import double_exp_fit, \
     exact_fit_exp
 from .stimuli import find_square_pulses, SquarePulse
 
