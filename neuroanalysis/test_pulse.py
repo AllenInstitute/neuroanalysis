@@ -216,7 +216,7 @@ class PatchClampTestPulse(PatchClampRecording):
                 
             input_r = v_step / pulse_amp  # soma
             access_r = ((fit_y0 - prepulse_median) / pulse_amp) + self.meta['bridge_balance']  # pipette
-            cap = main_fit_tau / input_r
+            cap = main_fit_tau / (input_r + access_r)
 
         self._analysis = {
             'start_time': self.start_time,
