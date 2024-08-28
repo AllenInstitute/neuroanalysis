@@ -194,6 +194,8 @@ class PatchClampTestPulse(PatchClampRecording):
 
             access_r = pulse_amp / access_step  # pipette
             input_r = (pulse_amp / input_step) - access_r  # soma
+            # This uses the full formula for a parallel RC circuit as derived by
+            # https://www.youtube.com/watch?v=4I5hswA45CM
             cap = main_fit_tau * (1 / access_r + 1 / input_r)
 
         else:  # IC mode
@@ -212,6 +214,8 @@ class PatchClampTestPulse(PatchClampRecording):
                 
             input_r = v_step / pulse_amp  # soma
             access_r = ((fit_y0 - prepulse_median) / pulse_amp) + self.meta['bridge_balance']  # pipette
+            # This uses the formula for a series RC circuit, effectively ignoring the access resistance and even the
+            # voltage source.
             cap = main_fit_tau / input_r
 
         self._analysis = {
