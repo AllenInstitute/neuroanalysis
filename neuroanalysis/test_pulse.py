@@ -194,8 +194,11 @@ class PatchClampTestPulse(PatchClampRecording):
 
             access_r = pulse_amp / access_step  # pipette
             input_r = (pulse_amp / input_step) - access_r  # soma
-            # This uses the full formula for a parallel RC circuit as derived by
-            # https://www.youtube.com/watch?v=4I5hswA45CM
+            # This uses the formula for a parallel RC circuit in series with an R. The tau in this case is
+            # proportional to the capacitance (it takes longer to fill larger capacitors), to Ra (it takes
+            # longer to fill capacitors through a constrained flow), and to Ri (the current has a harder time
+            # shifting onto a path with a larger resistor).
+            # See https://www.youtube.com/watch?v=4I5hswA45CM for full derivation.
             cap = main_fit_tau * (1 / access_r + 1 / input_r)
 
         else:  # IC mode
@@ -214,8 +217,11 @@ class PatchClampTestPulse(PatchClampRecording):
                 
             input_r = v_step / pulse_amp  # soma
             access_r = ((fit_y0 - prepulse_median) / pulse_amp) + self.meta['bridge_balance']  # pipette
-            # This uses the formula for a series RC circuit, effectively ignoring the access resistance and even the
-            # voltage source. See https://www.youtube.com/watch?v=2m1emG-agbM for derivation.
+            # This uses the formula for a series RC circuit, effectively ignoring the access resistance and the
+            # voltage source. This is because, with current (change in charge over time) pinned at the source, any
+            # change in charge that the capacitor wants to do cannot go through the source, nor Ra. Thus, the
+            # perceived voltage drop will be the one described by a discharging capacitor in series with Ri.
+            # See https://www.youtube.com/watch?v=2m1emG-agbM for derivation.
             cap = main_fit_tau / input_r
 
         self._analysis = {
