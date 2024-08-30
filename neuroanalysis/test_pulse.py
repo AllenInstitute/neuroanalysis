@@ -15,24 +15,26 @@ class LowConfidenceFitError(Exception):
 class PatchClampTestPulse(PatchClampRecording):
     """A PatchClampRecording that contains a subthreshold, square pulse stimulus.
     """
-    def __init__(self, rec: PatchClampRecording, indices=None):
+    def __init__(self, rec: PatchClampRecording, indices=None, stimulus=None):
         if indices is None:
             indices = (0, len(rec['primary']))
         self._indices = indices
         start, stop = indices
 
         pri = rec['primary'][start:stop]
-        cmd = rec['command'][start:stop]
-        channels = {'primary': pri, 'command': cmd}
-        # find pulse
-        pulses = find_square_pulses(cmd)
-        if len(pulses) == 0:
-            raise ValueError("Could not find square pulse in command waveform. Consider using `indices`.")
-        elif len(pulses) > 1:
-            raise ValueError("Found multiple square pulse in command waveform. Consider using `indices`.")
-        pulse = pulses[0]
-        pulse.description = 'test pulse'
-        stimulus = pulse
+        channels = {'primary': pri}
+        if stimulus is None:
+            cmd = rec['command'][start:stop]
+            channels['command'] = cmd
+            # find pulse
+            pulses = find_square_pulses(cmd)
+            if len(pulses) == 0:
+                raise ValueError("Could not find square pulse in command waveform. Consider using `indices`.")
+            elif len(pulses) > 1:
+                raise ValueError("Found multiple square pulse in command waveform. Consider using `indices`.")
+            pulse = pulses[0]
+            pulse.description = 'test pulse'
+            stimulus = pulse
 
         super().__init__(
             recording=rec,
