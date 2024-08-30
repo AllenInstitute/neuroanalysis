@@ -56,7 +56,7 @@ class PatchClampTestPulse(PatchClampRecording):
         self.fit_result_with_transient = None
         self.fit_trace_with_transient = None
 
-    def dump(self):
+    def save(self):
         """Return a dictionary with all data needed to reconstruct this object.
         """
         return {

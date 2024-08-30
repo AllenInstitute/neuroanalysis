@@ -53,7 +53,7 @@ class H5BackedTestPulseStack:
 
     def append(self, test_pulse: PatchClampTestPulse) -> tuple[str, str]:
         """Append a test pulse to the stack. Returns the full path name of the dataset."""
-        rec = test_pulse.dump()
+        rec = test_pulse.save()
         data = np.column_stack((rec['time_values'], rec['data']))
         dataset = self._containing_groups[-1].create_dataset(
             str(rec['start_time']),

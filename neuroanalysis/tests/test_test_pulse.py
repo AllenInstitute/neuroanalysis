@@ -373,7 +373,7 @@ def check_analysis(pulse, tp_kwds, only=None, tol_override=None):
 
 def test_load():
     tp, _ = create_mock_test_pulse()
-    new_tp = PatchClampTestPulse.load(tp.dump())
+    new_tp = PatchClampTestPulse.load(tp.save())
     for k, v in tp.analysis.items():
         if isinstance(v, (np.ndarray, int, float)):
             assert np.allclose(v, new_tp.analysis[k])
