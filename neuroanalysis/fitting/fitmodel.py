@@ -1,12 +1,12 @@
-from __future__ import print_function, division
 """
 Derived from acq4 and cnmodel code originally developed by Luke Campagnola and Paul B. Manis,
 Univerity of North Carolina at Chapel Hill.
 """
-import numpy as np
 import lmfit
+import numpy as np
 
 from ..stats import weighted_std
+from ..ui.fitting import FitExplorer
 
 
 class FitModel(lmfit.Model):

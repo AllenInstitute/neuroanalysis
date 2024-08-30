@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 
 from neuroanalysis.data import TSeries
-from neuroanalysis.fitting.exp import exp_decay, exp_fit, exact_fit_exp, best_exp_fit_for_tau
+from neuroanalysis.fitting.exp import exp_decay, exact_fit_exp, best_exp_fit_for_tau
 
 
 @pytest.mark.parametrize('tau', 10**np.linspace(-4, 0, 10))
@@ -67,7 +67,7 @@ def test_bad_curve(plot=False):
     data = exp_decay(t, **params)
     data += np.random.normal(0, noise, data.shape)
     y = TSeries(data, time_values=t)
-    fit = exp_fit(y)
+    fit = exact_fit_exp(y)
     if plot:
         plot_test_result(y, params, fit)
 

@@ -1,10 +1,6 @@
-import warnings
-from typing import Callable
-
-import functools
 import numpy as np
-import scipy.optimize
 from scipy.optimize import minimize
+from typing import Callable
 
 from .fit_scale_offset import fit_scale_offset
 from .fitmodel import FitModel
