@@ -104,7 +104,7 @@ def quantify_confidence(tau: float, memory: dict, data: TSeries) -> float:
     return exp_like
 
 
-def exact_fit_exp(data: TSeries):
+def exp_fit(data: TSeries):
     """Fit *data* to an exponential decay.
 
     This is a minimization of the normalized RMS error of the fit over the decay time constant.

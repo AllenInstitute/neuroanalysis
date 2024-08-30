@@ -2,14 +2,14 @@ import numpy as np
 import pytest
 
 from neuroanalysis.data import TSeries
-from neuroanalysis.fitting.exp import exp_decay, exact_fit_exp, best_exp_fit_for_tau
+from neuroanalysis.fitting.exp import exp_decay, exp_fit, best_exp_fit_for_tau
 
 
 @pytest.mark.parametrize('tau', 10**np.linspace(-4, 0, 10))
 @pytest.mark.parametrize('yoffset', np.linspace(-0.1, 0.1, 3))
 @pytest.mark.parametrize('yscale', 10**np.linspace(-4, -1, 4))
 @pytest.mark.parametrize('yscale_sign', [-1, 1])
-@pytest.mark.parametrize('fn', [exact_fit_exp])  # , exp_fit
+@pytest.mark.parametrize('fn', [exp_fit])  # , exp_fit
 def test_ic_exp_fit(tau, yoffset, yscale, yscale_sign, fn, plot_errors=False, plot_all=False, raise_errors=True):
     noise = 5e-3
     duration = 0.2
@@ -22,7 +22,7 @@ def test_ic_exp_fit(tau, yoffset, yscale, yscale_sign, fn, plot_errors=False, pl
 @pytest.mark.parametrize('yoffset', np.linspace(-1e-9, 1e-9, 3))
 @pytest.mark.parametrize('yscale', 10**np.linspace(-13, -9, 4))
 @pytest.mark.parametrize('yscale_sign', [-1, 1])
-@pytest.mark.parametrize('fn', [exact_fit_exp])  # , exp_fit
+@pytest.mark.parametrize('fn', [exp_fit])  # , exp_fit
 def test_vc_exp_fit(tau, yoffset, yscale, yscale_sign, fn, plot_errors=False, plot_all=False, raise_errors=True):
     noise = 50e-12
     duration = 0.02
@@ -67,7 +67,7 @@ def test_bad_curve(plot=False):
     data = exp_decay(t, **params)
     data += np.random.normal(0, noise, data.shape)
     y = TSeries(data, time_values=t)
-    fit = exact_fit_exp(y)
+    fit = exp_fit(y)
     if plot:
         plot_test_result(y, params, fit)
 

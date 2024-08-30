@@ -4,7 +4,7 @@ import warnings
 
 import pyqtgraph as pg
 from .data import PatchClampRecording, TSeries
-from .fitting.exp import exact_fit_exp
+from .fitting.exp import exp_fit
 from .stimuli import find_square_pulses, SquarePulse
 
 
@@ -258,7 +258,7 @@ class PatchClampTestPulse(PatchClampRecording):
         main_fit_region = pulse.time_slice(pulse.t0 + 150e-6, None)
         self._main_fit_region = main_fit_region
         with warnings.catch_warnings(action='ignore'):
-            self.main_fit_result = exact_fit_exp(main_fit_region)
+            self.main_fit_result = exp_fit(main_fit_region)
         main_fit_yoffset, main_fit_amp, main_fit_tau = self.main_fit_result['fit']
         self.main_fit_trace = TSeries(self.main_fit_result['model'](main_fit_region.time_values),
                                       time_values=main_fit_region.time_values)
@@ -268,7 +268,7 @@ class PatchClampTestPulse(PatchClampRecording):
         with contextlib.suppress(ValueError):
             # now fit with the access transients included as an additional exponential decay
             prediction = self.main_fit_result['model'](pulse.time_values)
-            self.fit_result_with_transient = exact_fit_exp(pulse - prediction)
+            self.fit_result_with_transient = exp_fit(pulse - prediction)
 
             self.fit_trace_with_transient = TSeries(
                 self.fit_result_with_transient['model'](pulse.time_values) + prediction,
