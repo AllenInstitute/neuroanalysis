@@ -4,8 +4,7 @@ import warnings
 
 import pyqtgraph as pg
 from .data import PatchClampRecording, TSeries
-from .fitting.exp import double_exp_fit, \
-    exact_fit_exp
+from .fitting.exp import exact_fit_exp
 from .stimuli import find_square_pulses, SquarePulse
 
 
@@ -286,14 +285,6 @@ class PatchClampTestPulse(PatchClampRecording):
         tau = float('nan')
         y0 = base_median
         return yscale, tau, yoffset, y0
-
-    def one_pass_exp_fit(self, base_median, data, pulse, pulse_start):
-        fit_result = double_exp_fit(pulse, pulse_start)
-        self._main_fit_region = pulse
-        self.main_fit_result = fit_result
-        pip_yoffset, pip_xoffset, pip_tau, cell_offset, cell_scale, cell_tau = self.main_fit_result['fit']
-        self.main_fit_trace = TSeries(self.main_fit_result['model'](pulse.time_values), time_values=pulse.time_values)
-        return cell_scale, cell_tau, cell_offset, pip_yoffset
 
     @property
     def plot_units(self):
