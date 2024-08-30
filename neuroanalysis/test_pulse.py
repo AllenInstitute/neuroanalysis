@@ -66,7 +66,7 @@ class PatchClampTestPulse(PatchClampRecording):
             'device_type': self.device_type,
             'device_id': self.device_id,
             'start_time': self.start_time,
-            'stimulus': self.stimulus.dump(),
+            'stimulus': self.stimulus.save(),
             'data': self['primary'].data,
             'time_values': self['primary'].time_values,
             'clamp_mode': self.clamp_mode,
@@ -81,7 +81,12 @@ class PatchClampTestPulse(PatchClampRecording):
     def load(cls, data):
         """Reconstruct a PatchClampTestPulse from data returned by `dump()`.
         """
-        stim = SquarePulse(**data['stimulus'])
+        if 'args' in data['stimulus']:
+            stim = SquarePulse.load(data['stimulus'])
+        else:
+            # TODO version our schemas
+            # TODO remove this once we're done using old data
+            stim = SquarePulse(**data['stimulus'])
         rec = PatchClampRecording(
             device_type=data['device_type'],
             device_id=data['device_id'],

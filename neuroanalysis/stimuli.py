@@ -359,15 +359,6 @@ class SquarePulse(Stimulus):
         self.amplitude = amplitude
         Stimulus.__init__(self, description=description, start_time=start_time, units=units, parent=parent)
 
-    def dump(self):
-        return {
-            'start_time': self.start_time,
-            'duration': self.duration,
-            'amplitude': self.amplitude,
-            'description': self.description,
-            'units': self.units,
-        }
-
     def eval(self, **kwds):
         trace = Stimulus.eval(self, **kwds)
         start = self.global_start_time
