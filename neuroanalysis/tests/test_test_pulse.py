@@ -384,7 +384,7 @@ def test_load():
 def test_bath_ugly():
     from neuroanalysis.test_pulse_stack import H5BackedTestPulseStack
 
-    fn = os.path.join(os.path.dirname(__file__), 'bath-ugly.h5')
+    fn = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'test_data', 'bath-ugly.h5')
     print(fn)
     f = h5py.File(fn, 'r')
     tps = H5BackedTestPulseStack(f['test_pulses'])
