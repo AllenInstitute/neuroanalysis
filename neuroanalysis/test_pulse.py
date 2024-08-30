@@ -55,7 +55,6 @@ class PatchClampTestPulse(PatchClampRecording):
         self.main_fit_trace = None
         self.fit_result_with_transient = None
         self.fit_trace_with_transient = None
-        self.initial_double_fit_trace = None
 
     def dump(self):
         """Return a dictionary with all data needed to reconstruct this object.
@@ -305,8 +304,6 @@ class PatchClampTestPulse(PatchClampRecording):
         plt.plot(self['primary'].time_values, self['primary'].data, name="raw")
         if self.fit_trace_with_transient is not None:
             plt.plot(self.fit_trace_with_transient.time_values, self.fit_trace_with_transient.data, pen='b', name="fit w/ trans")
-        if self.initial_double_fit_trace is not None:
-            plt.plot(self.initial_double_fit_trace.time_values, self.initial_double_fit_trace.data, pen='g', name="initial double fit")
         plt.plot(self.main_fit_trace.time_values, self.main_fit_trace.data, pen='r', name="first fit")
         if label:
             self.label_for_plot(plt.getPlotItem())
