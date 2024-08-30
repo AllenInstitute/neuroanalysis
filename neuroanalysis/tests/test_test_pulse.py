@@ -239,21 +239,19 @@ def create_mock_test_pulse(
         out += np.random.normal(0, noise, out.shape)
     pulse = pulse[int(settle // dt):int((settle + start + pdur + settle) // dt)]
 
-    tp = PatchClampTestPulse(
-        PatchClampRecording(
-            channels={
-                'primary': TSeries(out, dt=dt),
-                'command': TSeries(pulse, dt=dt)},
-            dt=dt,
-            t0=0,
-            clamp_mode=mode,
-            bridge_balance=0,
-            lpf_cutoff=None,
-            pipette_offset=0,
-            holding_current=hold if mode == 'ic' else None,
-            holding_potential=hold if mode == 'vc' else None,
-        ),
-    )
+    tp = PatchClampTestPulse(PatchClampRecording(
+        channels={
+            'primary': TSeries(out, dt=dt),
+            'command': TSeries(pulse, dt=dt)},
+        dt=dt,
+        t0=0,
+        clamp_mode=mode,
+        bridge_balance=0,
+        lpf_cutoff=None,
+        pipette_offset=0,
+        holding_current=hold if mode == 'ic' else None,
+        holding_potential=hold if mode == 'vc' else None,
+    ))
     if plot:
         tp.plot()
         # pg.plot(pulse, title=f'{mode} command')
