@@ -62,6 +62,7 @@ class PatchClampTestPulse(PatchClampRecording):
         """Return a dictionary with all data needed to reconstruct this object.
         """
         return {
+            'schema version': (1, 0),
             'device_type': self.device_type,
             'device_id': self.device_id,
             'start_time': self.start_time,
@@ -80,18 +81,19 @@ class PatchClampTestPulse(PatchClampRecording):
     def load(cls, data):
         """Reconstruct a PatchClampTestPulse from data returned by `dump()`.
         """
-        if 'args' in data['stimulus']:
-            stim = SquarePulse.load(data['stimulus'])
-        else:
-            # TODO version our schemas
-            # TODO remove this once we're done using old data
-            stim = SquarePulse(**data['stimulus'])
+        if 'schema version' not in data:
+            return cls._load_unversioned(data)
+        elif data['schema version'][0] == 1:
+            return cls._load_v1(data)
+
+    @classmethod
+    def _load_unversioned(cls, data):
         rec = PatchClampRecording(
             device_type=data['device_type'],
             device_id=data['device_id'],
             start_time=data['start_time'],
             channels={'primary': TSeries(data['data'], time_values=data['time_values'])},
-            stimulus=stim,
+            stimulus=SquarePulse(**data['stimulus']),
             clamp_mode=data['clamp_mode'],
             holding_potential=data['holding_potential'],
             holding_current=data['holding_current'],
@@ -99,7 +101,24 @@ class PatchClampTestPulse(PatchClampRecording):
             lpf_cutoff=data['lpf_cutoff'],
             pipette_offset=data['pipette_offset'],
         )
-        return cls(rec, stimulus=stim)
+        return cls(rec, stimulus=rec.stimulus)
+
+    @classmethod
+    def _load_v1(cls, data):
+        rec = PatchClampRecording(
+            device_type=data['device_type'],
+            device_id=data['device_id'],
+            start_time=data['start_time'],
+            channels={'primary': TSeries(data['data'], time_values=data['time_values'])},
+            stimulus=SquarePulse.load(data['stimulus']),
+            clamp_mode=data['clamp_mode'],
+            holding_potential=data['holding_potential'],
+            holding_current=data['holding_current'],
+            bridge_balance=data['bridge_balance'],
+            lpf_cutoff=data['lpf_cutoff'],
+            pipette_offset=data['pipette_offset'],
+        )
+        return cls(rec, stimulus=rec.stimulus)
 
     @property
     def indices(self):
