@@ -1288,6 +1288,11 @@ class TSeries(Container):
             x = x.data
         return self.copy(data=self.data - x)
 
+    def concat(self, other):
+        data = np.concatenate([self.data, other.data])
+        times = np.concatenate([self.time_values, other.time_values])
+        return self.copy(data=data, time_values=times)
+
     def mean(self):
         """Return the mean value of the data in this TSeries.
 
