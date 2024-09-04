@@ -110,7 +110,7 @@ class PatchClampTestPulse(PatchClampRecording):
             device_id=data['device_id'],
             start_time=data['start_time'],
             channels={'primary': TSeries(data['data'], time_values=data['time_values'])},
-            stimulus=SquarePulse.load(data['stimulus']),
+            stimulus=SquarePulse.load({'type': 'SquarePulse', 'args': data['stimulus'], 'items': []}),
             clamp_mode=data['clamp_mode'],
             holding_potential=data['holding_potential'],
             holding_current=data['holding_current'],

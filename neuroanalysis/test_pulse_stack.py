@@ -64,7 +64,7 @@ class H5BackedTestPulseStack:
         for k, v in rec.items():
             if k not in ('time_values', 'data', 'stimulus'):
                 dataset.attrs[k] = v or 0  # None values are not allowed
-        for k, v in rec['stimulus'].items():
+        for k, v in rec['stimulus']['args'].items():
             dataset.attrs[f"stimulus_{k}"] = v
 
         self._test_pulses[test_pulse.start_time] = test_pulse
