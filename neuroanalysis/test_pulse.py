@@ -289,7 +289,8 @@ class PatchClampTestPulse(PatchClampRecording):
         with contextlib.suppress(ValueError):
             # now fit with the access transients included as an additional exponential decay
             prediction = self.main_fit_result['model'](pulse.time_values)
-            self.fit_result_with_transient = exp_fit(pulse - prediction)
+            with warnings.catch_warnings(action='ignore'):
+                self.fit_result_with_transient = exp_fit(pulse - prediction)
 
             self.fit_trace_with_transient = TSeries(
                 self.fit_result_with_transient['model'](pulse.time_values) + prediction,
