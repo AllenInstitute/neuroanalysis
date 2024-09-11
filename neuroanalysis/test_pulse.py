@@ -12,19 +12,21 @@ class LowConfidenceFitError(Exception):
     pass
 
 
-class PatchClampTestPulse(PatchClampRecording):
-    """A PatchClampRecording that contains a subthreshold, square pulse stimulus.
+class PatchClampTestPulse(object):
+    """A PatchClampRecording of a sub-threshold, square-pulse stimulus.
     """
     def __init__(self, rec: PatchClampRecording, indices=None, stimulus=None):
         if indices is None:
             indices = (0, len(rec['primary']))
+        else:
+            rec = rec.time_slice(*indices)
+        self._recording = rec
         self._indices = indices
-        start, stop = indices
 
-        pri = rec['primary'][start:stop]
+        pri = rec['primary']
         channels = {'primary': pri}
         if stimulus is None:
-            cmd = rec['command'][start:stop]
+            cmd = rec['command']
             channels['command'] = cmd
             # find pulse
             pulses = find_square_pulses(cmd)
@@ -35,21 +37,8 @@ class PatchClampTestPulse(PatchClampRecording):
             pulse = pulses[0]
             pulse.description = 'test pulse'
             stimulus = pulse
+        self._stimulus = stimulus
 
-        super().__init__(
-            recording=rec,
-            device_type=rec.device_type,
-            device_id=rec.device_id,
-            start_time=rec.start_time,
-            channels=channels,
-            stimulus=stimulus,
-            clamp_mode=rec.clamp_mode,
-            holding_potential=rec.meta['holding_potential'],
-            holding_current=rec.meta['holding_current'],
-            bridge_balance=rec.meta['bridge_balance'],
-            lpf_cutoff=rec.meta['lpf_cutoff'],
-            pipette_offset=rec.meta['pipette_offset'],
-        )
         self._analysis = None
         # expose these for display and debugging
         self._main_fit_region = None
@@ -62,19 +51,10 @@ class PatchClampTestPulse(PatchClampRecording):
         """Return a dictionary with all data needed to reconstruct this object.
         """
         return {
-            'schema version': (1, 0),
-            'device_type': self.device_type,
-            'device_id': self.device_id,
-            'start_time': self.start_time,
-            'stimulus': self.stimulus.save(),
-            'data': self['primary'].data,
-            'time_values': self['primary'].time_values,
-            'clamp_mode': self.clamp_mode,
-            'holding_potential':  self.holding_potential,
-            'holding_current':  self.holding_current,
-            'bridge_balance':  self._meta['bridge_balance'],
-            'lpf_cutoff':  self._meta['lpf_cutoff'],
-            'pipette_offset':  self._meta['pipette_offset'],
+            'schema version': (2, 0),
+            'indices': self._indices,
+            'recording': self._recording.save(),
+            'stimulus': self._stimulus.save(),
         }
 
     @classmethod
@@ -85,6 +65,8 @@ class PatchClampTestPulse(PatchClampRecording):
             return cls._load_unversioned(data)
         elif data['schema version'][0] == 1:
             return cls._load_v1(data)
+        elif data['schema version'][0] == 2:
+            return cls._load_v2(data)
 
     @classmethod
     def _load_unversioned(cls, data):
@@ -119,6 +101,15 @@ class PatchClampTestPulse(PatchClampRecording):
             pipette_offset=data['pipette_offset'],
         )
         return cls(rec, stimulus=rec.stimulus)
+
+    @classmethod
+    def _load_v2(cls, data):
+        rec = PatchClampRecording.load(data['recording'])
+        return cls(rec, indices=data['indices'], stimulus=SquarePulse.load(data['stimulus']))
+
+    @property
+    def recording(self):
+        return self._recording
 
     @property
     def indices(self):
@@ -174,13 +165,14 @@ class PatchClampTestPulse(PatchClampRecording):
     def _analyze(self):
         # adapted from ACQ4
         
-        pulse_amp = self.stimulus.amplitude
-        clamp_mode = self.clamp_mode
-        
-        data = self['primary']
-        
-        pulse_start = data.t0 + self.stimulus.start_time
-        pulse_stop = pulse_start + self.stimulus.duration
+        pulse_amp = self._stimulus.amplitude
+        rec = self._recording
+        clamp_mode = rec.clamp_mode
+
+        data = rec['primary']
+
+        pulse_start = data.t0 + self._stimulus.start_time
+        pulse_stop = pulse_start + self._stimulus.duration
 
         # Extract specific time segments
         padding = 50e-6
@@ -190,16 +182,15 @@ class PatchClampTestPulse(PatchClampRecording):
         prepulse_median = np.median(data.time_slice(pulse_start-5e-3, pulse_start).data)
 
         try:
-            main_fit_amp, main_fit_tau, main_fit_yoffset, fit_y0 = self.two_pass_exp_fit(
-                base_median, data, pulse, pulse_start)
+            main_fit_amp, main_fit_tau, main_fit_yoffset, fit_y0 = self.two_pass_exp_fit(pulse)
         except LowConfidenceFitError:
             main_fit_amp, main_fit_tau, main_fit_yoffset, fit_y0 = self.bath_fit(base_median, pulse)
 
         # Handle analysis differently depending on clamp mode
         if clamp_mode == 'vc':
-            base_v = self._meta.get('holding_potential')
+            base_v = rec.holding_potential
             if base_v is None:
-                base_v = self['command'].data[0]
+                base_v = rec['command'].data[0]
             base_i = base_median
             
             input_step = main_fit_yoffset - base_i
@@ -225,9 +216,9 @@ class PatchClampTestPulse(PatchClampRecording):
 
         else:  # IC mode
             base_v = base_median
-            base_i = self._meta.get('holding_current')
+            base_i = rec.holding_current
             if base_i is None:
-                base_i = self['command'].data[0]
+                base_i = rec['command'].data[0]
 
             if pulse_amp >= 0:
                 v_step = max(1e-5, main_fit_yoffset - fit_y0)
@@ -238,7 +229,7 @@ class PatchClampTestPulse(PatchClampRecording):
                 pulse_amp = 1e-14
                 
             input_r = v_step / pulse_amp  # soma
-            access_r = ((fit_y0 - prepulse_median) / pulse_amp) + self.meta['bridge_balance']  # pipette
+            access_r = ((fit_y0 - prepulse_median) / pulse_amp) + rec.bridge_balance  # pipette
             # This uses the formula for a series RC circuit, effectively ignoring the access resistance and the
             # voltage source. This is because, with current (change in charge over time) pinned at the source, any
             # change in charge that the capacitor wants to do cannot go through the source, nor Ra. Thus, the
@@ -247,7 +238,7 @@ class PatchClampTestPulse(PatchClampRecording):
             cap = main_fit_tau / input_r
 
         self._analysis = {
-            'start_time': self.start_time,
+            'start_time': rec.start_time,
             'steady_state_resistance': input_r + access_r,
             'input_resistance': input_r,
             'access_resistance': access_r,
@@ -274,7 +265,7 @@ class PatchClampTestPulse(PatchClampRecording):
             'baseline_current': ('A', 'Ih'),
         }
 
-    def two_pass_exp_fit(self, base_median, data, pulse, pulse_start):
+    def two_pass_exp_fit(self, pulse):
         # start by fitting the exponential decay from the post-pipette capacitance, ignoring initial transients
         main_fit_region = pulse.time_slice(pulse.t0 + 150e-6, None)
         self._main_fit_region = main_fit_region
@@ -300,32 +291,38 @@ class PatchClampTestPulse(PatchClampRecording):
             raise LowConfidenceFitError(self.main_fit_result['confidence'])
         return main_fit_amp, main_fit_tau, main_fit_yoffset, y0
 
-    def bath_fit(self, base_median, pulse):
+    @staticmethod
+    def bath_fit(base_median, pulse):
         # no cell, no non-transient exponential decay, just ohm's law.
         start_y = base_median
         end_y = pulse.data[-len(pulse.data) // 100:].mean()
-        yscale = start_y - end_y
-        yoffset = end_y
+        y_scale = start_y - end_y
+        y_offset = end_y
         tau = float('nan')
         y0 = base_median
-        return yscale, tau, yoffset, y0
+        return y_scale, tau, y_offset, y0
 
     @property
     def plot_units(self):
-        return 'A' if self.clamp_mode == 'vc' else 'V'
+        return 'A' if self._recording.clamp_mode == 'vc' else 'V'
 
     @property
     def plot_title(self):
-        return 'current' if self.clamp_mode == 'vc' else 'potential'
+        return 'current' if self._recording.clamp_mode == 'vc' else 'potential'
 
     def plot(self, plt=None, label=True):
         assert self.analysis is not None
         if plt is None:
             plt = pg.plot(labels={'left': (self.plot_title, self.plot_units), 'bottom': ('time', 's')})
             plt.addLegend()
-        plt.plot(self['primary'].time_values, self['primary'].data, name="raw")
+        plt.plot(self._recording['primary'].time_values, self._recording['primary'].data, name="raw")
         if self.fit_trace_with_transient is not None:
-            plt.plot(self.fit_trace_with_transient.time_values, self.fit_trace_with_transient.data, pen='b', name="fit w/ trans")
+            plt.plot(
+                self.fit_trace_with_transient.time_values,
+                self.fit_trace_with_transient.data,
+                pen='b',
+                name="fit w/ trans",
+            )
         plt.plot(self.main_fit_trace.time_values, self.main_fit_trace.data, pen='r', name="first fit")
         if label:
             self.label_for_plot(plt.getPlotItem())

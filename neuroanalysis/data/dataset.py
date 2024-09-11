@@ -627,10 +627,16 @@ class PatchClampRecording(Recording):
             return self.baseline_current
 
     @property
+    def bridge_balance(self):
+        """The bridge balance compensation applied during this recording.
+        """
+        return self._meta['bridge_balance']
+
+    @property
     def test_pulse(self):
         if self._test_pulse is None:
             self._test_pulse = self.loader.load_test_pulse(self)
-        return self._test_pulse ## may still be None
+        return self._test_pulse  # may still be None
 
     @property
     def nearest_test_pulse(self):
@@ -724,6 +730,28 @@ class PatchClampRecording(Recording):
 
     def __repr__(self):
         return f"<{self.__class__.__name__} device:{self.device_id} {self._descr()}>"
+
+    def save(self):
+        meta = self.meta.copy()
+        if meta.get('stimulus') is not None:
+            meta['stimulus'] = meta['stimulus'].save()
+        channels = {k: v.save() for k, v in self._channels.items()}
+        return {
+            'schema version': (1, 0),
+            'meta': meta,
+            'start_time': self.start_time,
+            'channels': channels,
+        }
+
+    @classmethod
+    def load(cls, data):
+        from neuroanalysis.stimuli import Stimulus
+
+        meta = data['meta']
+        if meta.get('stimulus') is not None:
+            meta['stimulus'] = Stimulus.load(meta['stimulus'])
+        channels = {k: TSeries.load(v) for k, v in data['channels'].items()}
+        return cls(channels=channels, **meta)
 
 
 class TSeries(Container):
@@ -1352,6 +1380,23 @@ class TSeries(Container):
             timing,
             units,
         )
+
+    def save(self):
+        return {
+            'schema version': (1, 0),
+            'data': self.data,
+            'time_values': self.time_values,
+            'meta': self.meta,
+        }
+
+    @classmethod
+    def load(cls, data):
+        meta = data.get('meta', {})
+        time_values = data.get('time_values')
+        if meta.get('dt') is not None:
+            time_values = None
+        data = data['data']
+        return cls(data, time_values=time_values, **meta)
 
 
 # for backward compatibility

@@ -428,7 +428,7 @@ if __name__ == '__main__':
         _kwds = eval(_kwds)
         _tp, vc_locals = create_mock_test_pulse(**_kwds)
         print(title)
-        print(_tp.clamp_mode, _tp.plot_units, _tp.analysis['time_constant'])
+        print(_tp.recording.clamp_mode, _tp.plot_units, _tp.analysis['time_constant'])
         plt = _tp.plot()
         plt.setTitle(f"tau: {_tp.analysis['time_constant']}, nrmse: {_tp.main_fit_result['nrmse']}")
         print(f"tp.analysis: {_tp.analysis}")

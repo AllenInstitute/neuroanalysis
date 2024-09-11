@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 
 import h5py
@@ -23,14 +24,25 @@ class H5BackedTestPulseStack:
         if key not in self._test_pulses:
             raise KeyError(f"Test pulse at time {key} not found")
         if self._test_pulses[key] is None:
-            # load the test pulse from the file
             tp = next(grp[str(key)] for grp in self._containing_groups if str(key) in grp)
-            rec = dict(tp.attrs.items())
-            rec['time_values'] = tp[:, 0]
-            rec['data'] = tp[:, 1]
-            rec['stimulus'] = {k[9:]: v for k, v in tp.attrs.items() if k.startswith('stimulus_')}
-            self._test_pulses[key] = PatchClampTestPulse.load(rec)
+            if tp.attrs.get('schema version', (0,))[0] == 2:
+                self._test_pulses[key] = self._load_test_pulse_v2(tp)
+            else:
+                self._test_pulses[key] = self._load_test_pulse_unversioned(tp)
         return self._test_pulses[key]
+
+    def _load_test_pulse_unversioned(self, tp):
+        rec = dict(tp.attrs.items())
+        rec['time_values'] = tp[:, 0]
+        rec['data'] = tp[:, 1]
+        rec['stimulus'] = {k[9:]: v for k, v in tp.attrs.items() if k.startswith('stimulus_')}
+        return PatchClampTestPulse.load(rec)
+
+    def _load_test_pulse_v2(self, tp):
+        state = json.loads(tp.attrs['save'])
+        state['recording']['channels']['primary']['time_values'] = tp[:, 0]
+        state['recording']['channels']['primary']['data'] = tp[:, 1]
+        return PatchClampTestPulse.load(state)
 
     def merge(self, other: H5BackedTestPulseStack):
         """Merge another stack into this one."""
@@ -53,22 +65,24 @@ class H5BackedTestPulseStack:
 
     def append(self, test_pulse: PatchClampTestPulse) -> tuple[str, str]:
         """Append a test pulse to the stack. Returns the full path name of the dataset."""
-        rec = test_pulse.save()
-        data = np.column_stack((rec['time_values'], rec['data']))
+        tp_dump = test_pulse.save()
+        rec = tp_dump['recording']
+        pri = rec['channels']['primary']
+        del rec['channels']['command']
+        data = np.column_stack((pri['time_values'], pri['data']))
+        del rec['channels']['primary']['time_values']
+        del rec['channels']['primary']['data']
         dataset = self._containing_groups[-1].create_dataset(
             str(rec['start_time']),
             data=data,
             compression='gzip',
             compression_opts=9,
         )
-        for k, v in rec.items():
-            if k not in ('time_values', 'data', 'stimulus'):
-                dataset.attrs[k] = v or 0  # None values are not allowed
-        for k, v in rec['stimulus']['args'].items():
-            dataset.attrs[f"stimulus_{k}"] = v
+        dataset.attrs['save'] = json.dumps(tp_dump)
+        dataset.attrs['schema version'] = tp_dump['schema version']
 
-        self._test_pulses[test_pulse.start_time] = test_pulse
-        self._np_timestamp_cache = np.append(self._np_timestamp_cache, test_pulse.start_time)
+        self._test_pulses[test_pulse.recording.start_time] = test_pulse
+        self._np_timestamp_cache = np.append(self._np_timestamp_cache, test_pulse.recording.start_time)
 
         return dataset.file.filename, dataset.name
 

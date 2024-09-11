@@ -1,12 +1,12 @@
 import h5py
 import numpy as np
-from collections import OrderedDict
-from neuroanalysis.data.dataset import SyncRecording, PatchClampRecording, Recording, TSeries
-import neuroanalysis.util.mies_nwb_parsing as parser
-#import aisynphys.pipeline.opto.data_model as dm
+
+# import aisynphys.pipeline.opto.data_model as dm
 import neuroanalysis.stimuli as stimuli
-from neuroanalysis.test_pulse import PatchClampTestPulse
+import neuroanalysis.util.mies_nwb_parsing as parser
+from neuroanalysis.data.dataset import SyncRecording, PatchClampRecording, Recording, TSeries
 from neuroanalysis.data.loaders.loaders import DatasetLoader
+from neuroanalysis.test_pulse import PatchClampTestPulse
 
 
 class MiesNwbLoader(DatasetLoader):
@@ -260,9 +260,9 @@ class MiesNwbLoader(DatasetLoader):
 
     def load_test_pulse(self, rec):
         if not isinstance(rec, PatchClampRecording):
-            raise Exception("Can only load test pulses for PatchClampRecording, not %s" %str(type(rec)))
+            raise TypeError(f"Can only load test pulses for PatchClampRecording, not {type(rec)}")
 
-        if not rec.meta['notebook']['TP Insert Checkbox'] == 1.0: ## no test pulse
+        if rec.meta['notebook']['TP Insert Checkbox'] != 1.0:  # no test pulse
             return None
 
         # get start/stop indices of the test pulse region
@@ -270,7 +270,7 @@ class MiesNwbLoader(DatasetLoader):
         total_dur = pulse_dur / (1.0 - 2. * rec.meta['notebook']['TP Baseline Fraction'])
         start = 0
         stop = start + int(total_dur / rec['primary'].dt)
-        
+
         return PatchClampTestPulse(rec, indices=(start, stop))
 
     def find_nearest_test_pulse(self, rec):
