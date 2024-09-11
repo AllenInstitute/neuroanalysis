@@ -1,3 +1,5 @@
+import warnings
+
 import numpy as np
 from scipy.optimize import minimize
 from typing import Callable
@@ -8,7 +10,8 @@ from ..data import TSeries
 
 
 def exp_decay(t, yoffset, yscale, tau, xoffset=0):
-    return yoffset + yscale * np.exp(-(t-xoffset) / tau)
+    with warnings.catch_warnings(action='ignore'):
+        return yoffset + yscale * np.exp(-(t-xoffset) / tau)
 
 
 def estimate_exp_params(data: TSeries):
