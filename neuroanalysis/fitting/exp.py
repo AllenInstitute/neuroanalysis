@@ -1,17 +1,21 @@
+import warnings
+
+import numpy as np
+from scipy.optimize import minimize
 from typing import Callable
 
-import functools
-import numpy as np
-import scipy.optimize
+from .fit_scale_offset import fit_scale_offset
 from .fitmodel import FitModel
 from ..data import TSeries
 
 
 def exp_decay(t, yoffset, yscale, tau, xoffset=0):
-    return yoffset + yscale * np.exp(-(t-xoffset) / tau)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        return yoffset + yscale * np.exp(-(t-xoffset) / tau)
 
 
-def estimate_exp_params(data):
+def estimate_exp_params(data: TSeries):
     """Estimate parameters for an exponential fit to data.
 
     Parameters
@@ -42,64 +46,103 @@ def normalized_rmse(data, params, fn: Callable=exp_decay):
     return np.mean((y - data.data) ** 2)**0.5 / data.data.std()
 
 
-def exp_fit(data):
-    initial_guess = estimate_exp_params(data)
-    bounds = ([-np.inf, -np.inf, 0], [np.inf, np.inf, np.inf])  # yoffset, yscale, tau
-    fit = scipy.optimize.curve_fit(
-        f=functools.partial(exp_decay, xoffset=initial_guess[3]),
-        xdata=data.time_values, 
-        ydata=data.data, 
-        p0=initial_guess[:3], 
-        bounds=bounds, 
-        # ftol=1e-8, gtol=1e-8,
+def best_exp_fit_for_tau(tau, x, y, std=None):
+    """Given a curve defined by x and y, find the yoffset and yscale that best fit 
+    an exponential decay with a fixed tau.
+
+    Parameters
+    ----------
+    tau : float
+        Decay time constant.
+    x : array
+        Time values.
+    y : array
+        Data values to fit.
+    std : float
+        Standard deviation of the data. If None, it is calculated from *y*.
+
+    Returns
+    -------
+    yscale : float
+        Y scaling factor for the exponential decay.
+    yoffset : float
+        Y offset for the exponential decay.
+    err : float
+        Normalized root mean squared error of the fit.
+    exp_y : array
+        The exponential decay curve that best fits the data.
+    
+    """
+    if std is None:
+        std = y.std()
+    exp_y = exp_decay(x, tau=tau, yscale=1, yoffset=0)
+    yscale, yoffset = fit_scale_offset(y, exp_y)
+    exp_y = exp_y * yscale + yoffset
+    err = ((exp_y - y) ** 2).mean()**0.5 / std
+    return yscale, yoffset, err, exp_y
+
+
+def quantify_confidence(tau: float, memory: dict, data: TSeries) -> float:
+    """
+    Given a run of best_exp_fit_for_tau, quantify the confidence in the fit.
+    """
+    # errs = np.array([v[2] for v in memory.values()])
+    # std = errs.std()
+    # n = len(errs)
+    # data_range = errs.max() - errs.min()
+    # max_std = (data_range / 2) * np.sqrt((n - 1) / n)
+    # poor_variation = 1 - std / max_std
+
+    y = data.data
+    x = data.time_values
+    err = memory[tau][2]
+    scale, offset = np.polyfit(x, y, 1)
+    linear_y = scale * x + offset
+    linear_err = ((linear_y - y) ** 2).mean()**0.5 / y.std()
+    exp_like = 1 / (1 + err / linear_err)
+    exp_like = max(0, exp_like - 0.5) * 2
+
+    # pv_factor = 1
+    # el_factor = 4
+    # return ((poor_variation ** pv_factor) * (exp_like ** el_factor)) ** (1 / (pv_factor + el_factor))
+    return exp_like
+
+
+def exp_fit(data: TSeries):
+    """Fit *data* to an exponential decay.
+
+    This is a minimization of the normalized RMS error of the fit over the decay time constant.
+    Other parameters are determined exactly for each value of the decay time constant.
+    """
+    xoffset = data.t0
+    data = data.copy()
+    data.t0 = 0
+    tau_init = 0.5 * (data.time_values[-1])
+    memory = {}
+    std = data.data.std()
+
+    def err_fn(params):
+        τ = params[0]
+        # keep a record of all tau values visited and their corresponding fits
+        if τ not in memory:
+            memory[τ] = best_exp_fit_for_tau(τ, data.time_values, data.data, std)
+        return memory[τ][2]
+
+    result = minimize(
+        err_fn,
+        tau_init,
+        bounds=[(1e-9, None)],
     )
-    nrmse = normalized_rmse(data, fit[0])
-    model = lambda t: exp_decay(t, *fit[0], xoffset=initial_guess[3])
+
+    tau = float(result.x[0])
+    yscale, yoffset, err, exp_y = memory[tau]
     return {
-        'fit': fit[0], 
-        'result': fit, 
-        'nrmse': nrmse,
-        'initial_guess': initial_guess,
-        'model': model,
-    }
-
-
-def fit_double_exp_decay(data: TSeries, pulse: TSeries, base_median: float, pulse_start: float, transientless_model: Callable):
-    prepulse_median = np.median(data.time_slice(pulse_start - 5e-3, pulse_start).data)
-
-    def double_exp_decay(t, yoffset, tau, xoffset):
-        amp = prepulse_median - yoffset
-        return exp_decay(t, yoffset, amp, tau, xoffset) + transientless_model(t) - yoffset
-
-    y0 = transientless_model(pulse.t0)
-    initial_guess = (
-        y0,
-        10e-6,
-        pulse_start,
-    )
-    bounds = tuple(zip(
-        sorted((y0 + y0 - base_median, base_median)),  # yoffset. y0 ± (y0 - base_median). sorted for clearer math.
-        (0, 200e-6),  # tau
-        (pulse_start - 5e-6, pulse_start + 100e-6),  # xoffset
-    ))
-    fit_region = data.time_slice(pulse_start, pulse_start + 5e-3)
-    result = scipy.optimize.curve_fit(
-        f=double_exp_decay,
-        xdata=fit_region.time_values,
-        ydata=fit_region.data,
-        p0=initial_guess,
-        bounds=bounds,
-        # ftol=1e-8, gtol=1e-8,
-    )
-    fit = result[0]
-    nrmse = normalized_rmse(pulse, fit, double_exp_decay)
-    return {
-        'fit': fit,
+        'fit': (yoffset, yscale, tau),
         'result': result,
-        'nrmse': nrmse,
-        'initial_guess': initial_guess,
-        'model': lambda t: double_exp_decay(t, *fit),
-        'guessed_model': lambda t: double_exp_decay(t, *initial_guess),
+        'memory': memory,
+        'nrmse': err,
+        'confidence': quantify_confidence(tau, memory, data),
+        'model': lambda t: exp_decay(t, yoffset, yscale, tau, xoffset),
     }
 
 

@@ -499,6 +499,28 @@ class Recording(Container):
     def __repr__(self):
         return f"<{self.__class__.__name__} device:{self.device_type}, channels:{str(self.channels)}>"
 
+    def save(self):
+        meta = self.meta.copy()
+        if meta.get('stimulus') is not None:
+            meta['stimulus'] = meta['stimulus'].save()
+        channels = {k: v.save() for k, v in self._channels.items()}
+        return {
+            'schema version': (1, 0),
+            'meta': meta,
+            'start_time': self.start_time,
+            'channels': channels,
+        }
+
+    @classmethod
+    def load(cls, data):
+        from neuroanalysis.stimuli import Stimulus
+
+        meta = data['meta']
+        if meta.get('stimulus') is not None:
+            meta['stimulus'] = Stimulus.load(meta['stimulus'])
+        channels = {k: TSeries.load(v) for k, v in data['channels'].items()}
+        return cls(channels=channels, **meta)
+
 
 class RecordingView(Recording):
     """A time-slice of a multi channel recording
@@ -588,7 +610,7 @@ class PatchClampRecording(Recording):
     def clamp_mode(self):
         """The mode of the patch clamp amplifier: 'vc', 'ic', or 'i0'.
         """
-        return self._meta['clamp_mode']
+        return self._meta['clamp_mode'].lower()
 
     @property
     def patch_mode(self):
@@ -627,10 +649,16 @@ class PatchClampRecording(Recording):
             return self.baseline_current
 
     @property
+    def bridge_balance(self):
+        """The bridge balance compensation applied during this recording.
+        """
+        return self._meta['bridge_balance']
+
+    @property
     def test_pulse(self):
         if self._test_pulse is None:
             self._test_pulse = self.loader.load_test_pulse(self)
-        return self._test_pulse ## may still be None
+        return self._test_pulse  # may still be None
 
     @property
     def nearest_test_pulse(self):
@@ -1161,20 +1189,22 @@ class TSeries(Container):
             These include dt, sample_rate, t0, start_time, units, and
             others.
         """
+        data, meta, tval = self._prepare_data_for_export(data, kwds, time_values)
+
+        return TSeries(data, time_values=tval, recording=self.recording, **meta)
+
+    def _prepare_data_for_export(self, data=None, time_values=None, **kwds):
         if data is None:
             data = self.data.copy()
-        
         if time_values is None:
             tval = self._time_values
             if tval is not None:
                 tval = tval.copy()
         else:
             tval = time_values
-        
         meta = self._meta.copy()
         meta.update(kwds)
-        
-        return TSeries(data, time_values=tval, recording=self.recording, **meta)
+        return data, meta, tval
 
     @property
     def parent(self):
@@ -1279,10 +1309,19 @@ class TSeries(Container):
         return self.copy(data=self.data / x)
 
     def __add__(self, x):
+        if isinstance(x, TSeries):
+            x = x.data
         return self.copy(data=self.data + x)
 
     def __sub__(self, x):
+        if isinstance(x, TSeries):
+            x = x.data
         return self.copy(data=self.data - x)
+
+    def concat(self, other):
+        data = np.concatenate([self.data, other.data])
+        times = np.concatenate([self.time_values, other.time_values])
+        return self.copy(data=data, time_values=times)
 
     def mean(self):
         """Return the mean value of the data in this TSeries.
@@ -1343,6 +1382,23 @@ class TSeries(Container):
             timing,
             units,
         )
+
+    def save(self):
+        data, meta, tval = self._prepare_data_for_export()
+
+        return {
+            'schema version': (1, 0),
+            'data': data,
+            'time_values': tval,
+            'meta': meta,
+        }
+
+    @classmethod
+    def load(cls, data):
+        meta = data.get('meta', {})
+        time_values = data.get('time_values')
+        data = data['data']
+        return cls(data, time_values=time_values, **meta)
 
 
 # for backward compatibility
