@@ -1397,8 +1397,6 @@ class TSeries(Container):
     def load(cls, data):
         meta = data.get('meta', {})
         time_values = data.get('time_values')
-        if meta.get('dt') is not None:
-            time_values = None
         data = data['data']
         return cls(data, time_values=time_values, **meta)
 
