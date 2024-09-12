@@ -269,7 +269,8 @@ class PatchClampTestPulse(object):
         # start by fitting the exponential decay from the post-pipette capacitance, ignoring initial transients
         main_fit_region = pulse.time_slice(pulse.t0 + 150e-6, None)
         self._main_fit_region = main_fit_region
-        with warnings.catch_warnings(action='ignore'):
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')
             self.main_fit_result = exp_fit(main_fit_region)
         main_fit_yoffset, main_fit_amp, main_fit_tau = self.main_fit_result['fit']
         self.main_fit_trace = TSeries(self.main_fit_result['model'](main_fit_region.time_values),
@@ -280,7 +281,8 @@ class PatchClampTestPulse(object):
         with contextlib.suppress(ValueError):
             # now fit with the access transients included as an additional exponential decay
             prediction = self.main_fit_result['model'](pulse.time_values)
-            with warnings.catch_warnings(action='ignore'):
+            with warnings.catch_warnings():
+                warnings.simplefilter('ignore')
                 self.fit_result_with_transient = exp_fit(pulse - prediction)
 
             self.fit_trace_with_transient = TSeries(

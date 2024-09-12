@@ -10,7 +10,8 @@ from ..data import TSeries
 
 
 def exp_decay(t, yoffset, yscale, tau, xoffset=0):
-    with warnings.catch_warnings(action='ignore'):
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
         return yoffset + yscale * np.exp(-(t-xoffset) / tau)
 
 
