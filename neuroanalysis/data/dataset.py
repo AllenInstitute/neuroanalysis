@@ -1189,20 +1189,22 @@ class TSeries(Container):
             These include dt, sample_rate, t0, start_time, units, and
             others.
         """
+        data, meta, tval = self._prepare_data_for_export(data, kwds, time_values)
+
+        return TSeries(data, time_values=tval, recording=self.recording, **meta)
+
+    def _prepare_data_for_export(self, data=None, time_values=None, **kwds):
         if data is None:
             data = self.data.copy()
-        
         if time_values is None:
             tval = self._time_values
             if tval is not None:
                 tval = tval.copy()
         else:
             tval = time_values
-        
         meta = self._meta.copy()
         meta.update(kwds)
-        
-        return TSeries(data, time_values=tval, recording=self.recording, **meta)
+        return data, meta, tval
 
     @property
     def parent(self):
@@ -1382,11 +1384,13 @@ class TSeries(Container):
         )
 
     def save(self):
+        data, meta, tval = self._prepare_data_for_export()
+
         return {
             'schema version': (1, 0),
-            'data': self.data,
-            'time_values': self.time_values,
-            'meta': self.meta,
+            'data': data,
+            'time_values': tval,
+            'meta': meta,
         }
 
     @classmethod
