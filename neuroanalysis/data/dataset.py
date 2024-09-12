@@ -499,6 +499,28 @@ class Recording(Container):
     def __repr__(self):
         return f"<{self.__class__.__name__} device:{self.device_type}, channels:{str(self.channels)}>"
 
+    def save(self):
+        meta = self.meta.copy()
+        if meta.get('stimulus') is not None:
+            meta['stimulus'] = meta['stimulus'].save()
+        channels = {k: v.save() for k, v in self._channels.items()}
+        return {
+            'schema version': (1, 0),
+            'meta': meta,
+            'start_time': self.start_time,
+            'channels': channels,
+        }
+
+    @classmethod
+    def load(cls, data):
+        from neuroanalysis.stimuli import Stimulus
+
+        meta = data['meta']
+        if meta.get('stimulus') is not None:
+            meta['stimulus'] = Stimulus.load(meta['stimulus'])
+        channels = {k: TSeries.load(v) for k, v in data['channels'].items()}
+        return cls(channels=channels, **meta)
+
 
 class RecordingView(Recording):
     """A time-slice of a multi channel recording
@@ -730,28 +752,6 @@ class PatchClampRecording(Recording):
 
     def __repr__(self):
         return f"<{self.__class__.__name__} device:{self.device_id} {self._descr()}>"
-
-    def save(self):
-        meta = self.meta.copy()
-        if meta.get('stimulus') is not None:
-            meta['stimulus'] = meta['stimulus'].save()
-        channels = {k: v.save() for k, v in self._channels.items()}
-        return {
-            'schema version': (1, 0),
-            'meta': meta,
-            'start_time': self.start_time,
-            'channels': channels,
-        }
-
-    @classmethod
-    def load(cls, data):
-        from neuroanalysis.stimuli import Stimulus
-
-        meta = data['meta']
-        if meta.get('stimulus') is not None:
-            meta['stimulus'] = Stimulus.load(meta['stimulus'])
-        channels = {k: TSeries.load(v) for k, v in data['channels'].items()}
-        return cls(channels=channels, **meta)
 
 
 class TSeries(Container):
