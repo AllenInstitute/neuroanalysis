@@ -1189,7 +1189,7 @@ class TSeries(Container):
             These include dt, sample_rate, t0, start_time, units, and
             others.
         """
-        data, meta, tval = self._prepare_data_for_export(data, kwds, time_values)
+        data, meta, tval = self._prepare_data_for_export(data, time_values, **kwds)
 
         return TSeries(data, time_values=tval, recording=self.recording, **meta)
 
