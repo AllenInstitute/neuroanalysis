@@ -211,6 +211,7 @@ class PatchClampTestPulse(object):
             # proportional to the capacitance (it takes longer to fill larger capacitors), to Ra (it takes
             # longer to fill capacitors through a constrained flow), and to Ri (the current has a harder time
             # shifting onto a path with a larger resistor).
+            # https://electronics.stackexchange.com/questions/72185/what-is-tau-in-this-very-simple-circuit/72186#72186
             # See https://www.youtube.com/watch?v=4I5hswA45CM for full derivation.
             cap = main_fit_tau * (1 / access_r + 1 / input_r)
 
