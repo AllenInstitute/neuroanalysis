@@ -1,5 +1,5 @@
-from __future__ import division
 import numpy as np
+import scipy.optimize
 from .data import TSeries
 from .fitting.psp import Psp
 
@@ -16,7 +16,51 @@ def zero_crossing_events(data, min_length=3, min_peak=0.0, min_sum=0.0, noise_th
     
     Returns an array of events where each row is (start, length, sum, peak)
     """
-    
+    def measureNoise(data, threshold=2.0, iterations=2):
+        ## Determine the base level of noise
+        data = data.view(np.ndarray)
+        if iterations > 1:
+            med = np.median(data)
+            std = data.std()
+            thresh = std * threshold
+            arr = np.ma.masked_outside(data, med - thresh, med + thresh)
+            return measureNoise(arr[~arr.mask], threshold, iterations-1)
+        else:
+            return data.std()
+
+    def fit(function, xVals, yVals, guess, errFn=None, measureError=False, generateResult=False, resultXVals=None, **kargs):
+        """fit xVals, yVals to the specified function. 
+        If generateResult is True, then the fit is used to generate an array of points from function
+        with the xVals supplied (useful for plotting the fit results with the original data). 
+        The result x values can be explicitly set with resultXVals."""
+        if errFn is None:
+            errFn = lambda v, x, y: function(v, x)-y
+        if len(xVals) < len(guess):
+            raise Exception("Too few data points to fit this function. (%d variables, %d points)" % (len(guess), len(xVals)))
+        fitResult = scipy.optimize.leastsq(errFn, guess, args=(xVals, yVals), **kargs)
+        error = None
+        #if measureError:
+            #error = errFn(fit[0], xVals, yVals)
+        result = None
+        if generateResult or measureError:
+            if resultXVals is not None:
+                xVals = resultXVals
+            result = function(fitResult[0], xVals)
+            #fn = lambda i: function(fit[0], xVals[i.astype(int)])
+            #result = fromfunction(fn, xVals.shape)
+            if measureError:
+                error = abs(yVals - result).mean()
+        return fitResult + (result, error)
+
+    def fitGaussian(xVals, yVals, guess=[1.0, 0.0, 1.0, 0.0], **kargs):
+        """Returns least-squares fit parameters for function v[0] * exp(((x-v[1])**2) / (2 * v[2]**2)) + v[3]"""
+        return fit(gaussian, xVals, yVals, guess, **kargs)
+
+    def gaussian(v, x):
+        """Gaussian function value at x. The parameter v is [amplitude, x-offset, sigma, y-offset]"""
+        return v[0] * np.exp(-((x-v[1])**2) / (2 * v[2]**2)) + v[3]
+
+
     if isinstance(data, TSeries):
         xvals = data.time_values
         data1 = data.data
@@ -72,7 +116,7 @@ def zero_crossing_events(data, min_length=3, min_peak=0.0, min_sum=0.0, noise_th
         ## Fit gaussian to peak in size histogram, use fit sigma as criteria for noise rejection
         stdev = measureNoise(data1)
         #p.mark('measureNoise')
-        hist = histogram(events['sum'], bins=100)
+        hist = np.histogram(events['sum'], bins=100)
         #p.mark('histogram')
         histx = 0.5*(hist[1][1:] + hist[1][:-1]) ## get x values from middle of histogram bins
         #p.mark('histx')
@@ -162,6 +206,7 @@ def threshold_events(trace, threshold, adjust_times=True, baseline=0.0, omit_end
     ## Lots of work ahead:
     ## 1) compute length, peak, sum for each event
     ## 2) adjust event times if requested, then recompute parameters
+    last_adj = 0
     for i in range(n_events):
         ind1, ind2 = hits[i]
         ln = ind2-ind1
@@ -173,7 +218,7 @@ def threshold_events(trace, threshold, adjust_times=True, baseline=0.0, omit_end
             peak_ind = np.argmin(ev_data)
         peak = ev_data[peak_ind]
         peak_ind += ind1
-            
+        
         #print "event %f: %d" % (xvals[ind1], ind1) 
         if adjust_times:  ## Move start and end times outward, estimating the zero-crossing point for the event
         
