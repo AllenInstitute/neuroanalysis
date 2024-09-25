@@ -445,14 +445,14 @@ class LGKslow(Channel):
 #gAlpha = 1e-3 * Area/cm**2
 #EAlpha = -7e-3  # V
 
-def IAlpha(Vm, t):
-    if t < Alpha_t0:
-        return 0.
-    else:
-        # g = gmax * (t - onset)/tau * exp(-(t - onset - tau)/tau)
-        tn = t - Alpha_t0
-        if tn > 10.0 * Alpha_tau:
-            return 0.
-        else:
-            return gAlpha * (Vm - EAlpha)*(tn/Alpha_tau) * np.exp(-(tn-Alpha_tau)/Alpha_tau)
+# def IAlpha(Vm, t):
+#     if t < Alpha_t0:
+#         return 0.
+#     else:
+#         # g = gmax * (t - onset)/tau * exp(-(t - onset - tau)/tau)
+#         tn = t - Alpha_t0
+#         if tn > 10.0 * Alpha_tau:
+#             return 0.
+#         else:
+#             return gAlpha * (Vm - EAlpha)*(tn/Alpha_tau) * np.exp(-(tn-Alpha_tau)/Alpha_tau)
 

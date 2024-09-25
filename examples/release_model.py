@@ -38,8 +38,8 @@ model = ReleaseModel()
 dynamics_types = ['Dep', 'Fac', 'UR', 'SMR', 'DSR']
 model.Dynamics = {k:0 for k in dynamics_types}
 
-print "Initial parameters:", model.dict_params
-print "Bounds:", model.dict_bounds
+print("Initial parameters:", model.dict_params)
+print("Bounds:", model.dict_bounds)
 
 
 # Fit the model 5 times. Each time we enable another gating mechanism.
@@ -48,10 +48,10 @@ for k in dynamics_types:
     model.Dynamics[k] = 1
     fit_params.append(model.run_fit(spike_sets))
     
-print "----- fit complete -----"
+print("----- fit complete -----")
 
 for j,params in enumerate(fit_params):
-    print params
+    print(params)
     for i,spikes in enumerate(spike_sets):
         x, y = spikes
         output = model.eval(x, params.values())
