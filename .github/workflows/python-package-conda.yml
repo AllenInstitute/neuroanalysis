@@ -26,7 +26,7 @@ jobs:
       run: |
         # conda env update --file environment.yml --name base
         conda install numpy scipy h5py pandas
-        pip install lmfit
+        pip install lmfit pyqtgraph neuron
     - name: Lint with flake8
       run: |
         conda install flake8
