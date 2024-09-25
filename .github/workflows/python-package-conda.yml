@@ -20,8 +20,8 @@ jobs:
         echo $CONDA/bin >> $GITHUB_PATH
     - name: Download test data
       run: |
-        git submodule init test-data
-        git submodule update test-data
+        git submodule init test_data
+        git submodule update test_data
     - name: Install dependencies
       run: |
         # conda env update --file environment.yml --name base
