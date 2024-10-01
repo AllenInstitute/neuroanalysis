@@ -8,6 +8,9 @@ packages = ["neuroanalysis"]
 [tool.setuptools.dynamic]
 version = {attr = "neuroanalysis.__version__"}
 
+[tool.pytest.ini_options]
+testpaths = ["neuroanalysis/tests"]
+
 [project]
 name = "neuroanalysis"
 authors = [
@@ -34,13 +37,14 @@ dependencies = [
     "numpy",
     "scipy",
     "h5py",
+    "neuron",
 ]
 
 [project.optional-dependencies]
 "ACQ4" = ["acq4"]
 "jit" = ["numba"]
 "MIES" = []
-"test" = ["pytest", "pyqtgraph"]
+"test" = ["pytest"]
 "ui" = ["pyqtgraph"]
 
 [project.urls]

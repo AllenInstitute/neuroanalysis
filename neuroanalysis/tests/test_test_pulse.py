@@ -1,17 +1,15 @@
 import os
-
-import h5py
 from typing import Literal
 
+import h5py
 import numpy as np
 import pytest
 from neuron import h
-import pyqtgraph as pg
 
 from neuroanalysis.data import TSeries, PatchClampRecording
 from neuroanalysis.test_pulse import PatchClampTestPulse
 from neuroanalysis.units import pA, mV, uV, MOhm, pF, uF, us, ms, cm, nA, um, mm
-from pyqtgraph.parametertree import ParameterTree, interact
+
 
 h.load_file('stdrun.hoc')
 
@@ -410,7 +408,11 @@ def test_bath_ugly():
     assert tp.analysis['steady_state_resistance'] < 10e6
 
 
-if __name__ == '__main__':
+def main():
+    import pyqtgraph as pg
+    from pyqtgraph.parametertree import ParameterTree, interact
+
+    global params, app, tree
     params = interact(
         create_mock_test_pulse,
         rmp_soma={'siPrefix': True, 'suffix': 'V'},
@@ -421,15 +423,14 @@ if __name__ == '__main__':
         pamp={'siPrefix': True, 'suffix': 'V/A'},
         hold={'siPrefix': True, 'suffix': 'V/A'},
     )
-
     app = pg.mkQApp()
     tree = ParameterTree()
     tree.setParameters(params)
     tree.show()
     pg.exec()
-
     failures = [
-        "dict(pamp=-0.02, pdur=0.01, mode='vc', noise=0, c_soma=8e-11, c_pip=3e-12, r_input=100e6, r_access=100e6)",  # clogged pipette
+        "dict(pamp=-0.02, pdur=0.01, mode='vc', noise=0, c_soma=8e-11, c_pip=3e-12, r_input=100e6, r_access=100e6)",
+        # clogged pipette
         "dict(noise=0, pamp=-0.01, mode='vc', c_soma=1e-13, c_pip=3e-12, r_input=1000e6, r_access=10e6)",  # attached
         "dict(noise=10e-06, pamp=1.2e-11, pdur=0.2, mode='ic', r_access=5e6, r_input=103e6, c_soma=5e-11, c_pip=1e-11)",
         "dict(noise=10e-06, pamp=-1.1e-11, pdur=0.2, mode='ic', r_access=5e6, r_input=200e6, c_soma=5e-11, c_pip=1e-11)",
@@ -449,3 +450,7 @@ if __name__ == '__main__':
         print(f"tp.analysis: {_tp.analysis}")
         pg.exec()
         check_analysis(_tp, _kwds)
+
+
+if __name__ == '__main__':
+    main()

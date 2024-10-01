@@ -1,4 +1,3 @@
-from pytest import raises
 import numpy as np
 
 from neuroanalysis.data import TSeries

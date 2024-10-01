@@ -2,7 +2,6 @@ import contextlib
 import numpy as np
 import warnings
 
-import pyqtgraph as pg
 from .data import PatchClampRecording, TSeries
 from .fitting.exp import exp_fit
 from .stimuli import find_square_pulses, SquarePulse
@@ -314,6 +313,8 @@ class PatchClampTestPulse(object):
         return 'current' if self._recording.clamp_mode == 'vc' else 'potential'
 
     def plot(self, plt=None, label=True):
+        import pyqtgraph as pg
+
         assert self.analysis is not None
         if plt is None:
             plt = pg.plot(labels={'left': (self.plot_title, self.plot_units), 'bottom': ('time', 's')})
@@ -332,6 +333,8 @@ class PatchClampTestPulse(object):
         return plt
 
     def label_for_plot(self, plt):
+        import pyqtgraph as pg
+
         asymptote = self.analysis['fit_yoffset']
         plt.addItem(pg.InfiniteLine(
             (0, asymptote),
