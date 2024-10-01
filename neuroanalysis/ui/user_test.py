@@ -1,9 +1,10 @@
 import time
-import pyqtgraph as pg
 
 
 class UserTestUi(object):
     def __init__(self, expected_display, current_display):
+        import pyqtgraph as pg
+
         pg.mkQApp()
 
         self.widget = pg.QtWidgets.QSplitter(pg.QtCore.Qt.Vertical)
@@ -42,6 +43,8 @@ class UserTestUi(object):
         self.last_btn_clicked = 'fail'
 
     def user_passfail(self):
+        import pyqtgraph as pg
+
         self.widget.show()
         while True:
             pg.QtWidgets.QApplication.processEvents()
