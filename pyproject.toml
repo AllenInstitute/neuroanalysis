@@ -1,6 +1,48 @@
 [build-system]
-requires = [
-  "setuptools >= 40.9.0",
-  "wheel",
-]
+requires = ["setuptools >= 61.0"]
 build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["neuroanalysis"]
+
+[tool.setuptools.dynamic]
+version = {attr = "neuroanalysis.__version__"}
+
+[project]
+name = "neuroanalysis"
+authors = [
+  {name="Luke Campagnola", email="lukec@alleninstitute.org"},
+]
+description = "Functions and modular user interface tools for analysis of patch clamp experiment data."
+readme = "README.md"
+license = {file="LICENSE.txt"}
+keywords=["neuroscience", "analysis", "neurodata", "without", "borders", "nwb"]
+classifiers=[
+    "Development Status :: 4 - Beta",
+    "Environment :: Other Environment",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python",
+    "Topic :: Scientific/Engineering",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+dynamic = ["version"]
+dependencies = [
+    "lmfit",
+    "numpy",
+    "scipy",
+    "h5py",
+]
+
+[project.optional-dependencies]
+"ACQ4" = ["acq4"]
+"jit" = ["numba"]
+"MIES" = []
+"test" = ["pytest", "pyqtgraph"]
+"ui" = ["pyqtgraph"]
+
+[project.urls]
+homepage = "https://github.com/AllenInstitute/neuroanalysis"
+issues = "https://github.com/AllenInstitute/neuroanalysis/issues"
