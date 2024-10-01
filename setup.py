@@ -24,11 +24,11 @@ setup(
     extra_require={
         "ACQ4": ["acq4"],
         "jit": ["numba"],
-        "MIES": ["h5py"],
+        "MIES": [],
         "test": ["pytest"],
         "ui": ["pyqtgraph"],
     },
-    install_requires=["lmfit", "numpy", "scipy"],
+    install_requires=["lmfit", "numpy", "scipy", "h5py"],
     keywords="neuroscience analysis neurodata without borders nwb",
     license="MIT",
     long_description=long_description,
