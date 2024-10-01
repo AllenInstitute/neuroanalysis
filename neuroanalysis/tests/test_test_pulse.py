@@ -381,19 +381,16 @@ def test_load():
             assert v == new_tp.analysis[k]
 
 
-def test_unreadable_stack():
+def test_append_stack():
     from neuroanalysis.test_pulse_stack import H5BackedTestPulseStack
 
     f = h5py.File('test.h5', 'w')
     try:
-        stack = H5BackedTestPulseStack(f.create_group('test_pulses'), readable=False)
-        with pytest.raises(ValueError):
-            stack[0]
-        with pytest.raises(ValueError):
-            len(stack)
-        with pytest.raises(ValueError):
-            stack.merge(stack)
-        stack.append(create_mock_test_pulse()[0])
+        stack = H5BackedTestPulseStack(f.create_group('test_pulses'))
+        tp = create_mock_test_pulse()[0]
+        stack.append(tp, retain_data=False)
+        assert len(stack) == 1
+        assert stack[tp.recording.start_time].analysis == tp.analysis
     finally:
         f.close()
         os.remove('test.h5')

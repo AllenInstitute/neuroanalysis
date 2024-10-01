@@ -51,7 +51,7 @@ class PatchClampTestPulse(object):
         """Return a dictionary with all data needed to reconstruct this object.
         """
         return {
-            'schema version': (2, 0),
+            'schema version': (2, 1),
             'indices': self._indices,
             'recording': self._recording.save(),
             'stimulus': self._stimulus.save(),
