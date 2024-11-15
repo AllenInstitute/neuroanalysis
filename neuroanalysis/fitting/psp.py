@@ -173,7 +173,7 @@ class Psp2(FitModel):
         rise_exp = (1.0 - np.exp(-x / rise_tau))**rise_power
         decay_exp1 = amp1 * np.exp(-x / decay_tau1)
         decay_exp2 = amp2 * np.exp(-x / decay_tau2)
-        out[mask] = riseExp * (decay_exp1 + decay_exp2)
+        out[mask] = rise_exp * (decay_exp1 + decay_exp2)
 
         return out
 

@@ -59,6 +59,10 @@ class H5BackedTestPulseStack:
         for grp in self._containing_groups:
             grp.file.close()
 
+    @property
+    def files(self) -> list[h5py.File]:
+        return {grp.file for grp in self._containing_groups}
+
     def flush(self):
         for grp in self._containing_groups:
             grp.file.flush()
