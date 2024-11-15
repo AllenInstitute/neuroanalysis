@@ -28,7 +28,7 @@ setup(
         "test": ["pytest"],
         "ui": ["pyqtgraph"],
     },
-    install_requires=["lmfit", "numpy", "scipy"],
+    install_requires=["numpy", "scipy"],
     keywords="neuroscience analysis neurodata without borders nwb",
     license="MIT",
     long_description=long_description,
