@@ -2,13 +2,21 @@
 Derived from acq4 and cnmodel code originally developed by Luke Campagnola and Paul B. Manis,
 Univerity of North Carolina at Chapel Hill.
 """
-import lmfit
 import numpy as np
+try:
+    import lmfit
+    LmfitModel = lmfit.Model
+except ImportError as exc:
+    class LmfitModel:
+        def __init__(self, *args, **kwds):
+            raise exc
 
 from ..stats import weighted_std
+from ..util.optional_import import optional_import
+FitExplorer = optional_import('neuroanalysis.ui.fitting', 'FitExplorer')
 
 
-class FitModel(lmfit.Model):
+class FitModel(LmfitModel):
     """ Simple extension of lmfit.Model that allows one-line fitting.
     
     Each subclass of lmfit.Model describes a single mathematical function to be fit.

@@ -1,5 +1,3 @@
-# coding: utf8
-from collections import OrderedDict
 import numpy as np
 from .util.custom_weakref import WeakRef
 from .data import TSeries
@@ -56,10 +54,13 @@ class Stimulus(object):
 
     _attributes = ['description', 'start_time', 'units']
 
-    def __init__(self, description, start_time=0, units=None, items=None, parent=None):
+    def __init__(self, description="stimulus", start_time=0, units=None, items=None, parent=None):
         self.description = description
         self._start_time = start_time
         self.units = units
+        # Stimulus has a duration of 0 by default, but subclass may already have set this
+        if not hasattr(self, 'duration'):
+            self.duration = 0
         
         self._items = []
         self._parent = WeakRef(None)  
@@ -133,10 +134,7 @@ class Stimulus(object):
         """
         t = 0
         for item in self.ancestry:
-            item_start = item.start_time
-            if item_start is None:
-                return None
-            t += item_start
+            t += item.start_time
         return t
 
     @property
@@ -144,6 +142,32 @@ class Stimulus(object):
         """The starting time of this stimulus relative to its parent's start time.
         """
         return self._start_time
+
+    @property
+    def global_end_time(self):
+        """The global end time of this stimulus (global_start_time + duration).
+        """
+        return self.global_start_time + self.duration
+
+    @property
+    def end_time(self):
+        """The ending time of this stimulus relative to its parent's start time.
+        """
+        return self.start_time + self.duration
+
+    @property
+    def total_duration(self):
+        """The total duration of this stimulus and all of its children.
+        """
+        return self.global_end_time - self.global_start_time
+
+    @property
+    def total_global_end_time(self):
+        """The global end time of this stimulus and all of its children.
+
+        This is the value to use if you want to know when the stimulus is completely finished.
+        """
+        return max([self.global_end_time] + [item.total_global_end_time for item in self.items])
 
     @property
     def ancestry(self):
@@ -239,10 +263,10 @@ class Stimulus(object):
     def save(self):
         """Return a serializable representation of this Stimulus and its children.
         """
-        state = OrderedDict([
-            ('type', self.type),
-            ('args', OrderedDict([('start_time', float(self.start_time))])),
-        ])
+        state = {
+            'type': self.type,
+            'args': {'start_time': float(self.start_time)},
+        }
         for name in self._attributes:
             state['args'][name] = self._save_value(getattr(self, name))
         state['items'] = [item.save() for item in self.items]
@@ -264,11 +288,11 @@ class Stimulus(object):
         """
         item_type = state['type']
         item_class = cls.get_stimulus_class(item_type)
-        child_items = [cls.load(item_state) for item_state in state['items']]
+        child_items = [cls.load(item_state) for item_state in state.get('items', [])]
         if len(child_items) > 0:
-            return item_class(items=child_items, **state['args'])
+            return item_class(items=child_items, **state.get('args', {}))
         else:
-            return item_class(**state['args'])
+            return item_class(**state.get('args', {}))
 
     @classmethod
     def get_stimulus_class(cls, name):
