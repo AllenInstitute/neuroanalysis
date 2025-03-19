@@ -33,7 +33,6 @@ classifiers=[
 ]
 dynamic = ["version"]
 dependencies = [
-    "lmfit",
     "numpy",
     "scipy",
     "h5py",
