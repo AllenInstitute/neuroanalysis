@@ -15,6 +15,7 @@ class PatchClampTestPulse(object):
     """A PatchClampRecording of a sub-threshold, square-pulse stimulus.
     """
     def __init__(self, rec: PatchClampRecording, indices=None, stimulus=None):
+        self.data = None
         if indices is None:
             indices = (0, len(rec['primary']))
         else:

@@ -47,7 +47,7 @@ def _run_exp_fit_test(duration, fn, noise, plot_all, plot_errors, raise_errors, 
         plot_test_result(y, params, fit)
     try:
         check_exp_fit(y, params, fit, noise)
-    except RuntimeError:
+    except Exception:
         if plot_errors and not plot_all:
             plot_test_result(y, params, fit)
         if raise_errors:
