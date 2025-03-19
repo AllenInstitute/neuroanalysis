@@ -2,7 +2,6 @@ import contextlib
 import numpy as np
 import warnings
 
-import pyqtgraph as pg
 from .data import PatchClampRecording, TSeries
 from .fitting.exp import exp_fit
 from .stimuli import find_square_pulses, SquarePulse
@@ -16,6 +15,7 @@ class PatchClampTestPulse(object):
     """A PatchClampRecording of a sub-threshold, square-pulse stimulus.
     """
     def __init__(self, rec: PatchClampRecording, indices=None, stimulus=None):
+        self.data = None
         if indices is None:
             indices = (0, len(rec['primary']))
         else:
@@ -51,7 +51,7 @@ class PatchClampTestPulse(object):
         """Return a dictionary with all data needed to reconstruct this object.
         """
         return {
-            'schema version': (2, 0),
+            'schema version': (2, 1),
             'indices': self._indices,
             'recording': self._recording.save(),
             'stimulus': self._stimulus.save(),
@@ -314,6 +314,8 @@ class PatchClampTestPulse(object):
         return 'current' if self._recording.clamp_mode == 'vc' else 'potential'
 
     def plot(self, plt=None, label=True):
+        import pyqtgraph as pg
+
         assert self.analysis is not None
         if plt is None:
             plt = pg.plot(labels={'left': (self.plot_title, self.plot_units), 'bottom': ('time', 's')})
@@ -332,6 +334,8 @@ class PatchClampTestPulse(object):
         return plt
 
     def label_for_plot(self, plt):
+        import pyqtgraph as pg
+
         asymptote = self.analysis['fit_yoffset']
         plt.addItem(pg.InfiniteLine(
             (0, asymptote),

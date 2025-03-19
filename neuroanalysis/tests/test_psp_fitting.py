@@ -1,11 +1,10 @@
-import os, glob
-import numpy as np
+import glob
+import os
+
 import pytest
+
 import neuroanalysis.data
-from neuroanalysis.fitting.psp import fit_psp, PspFitTestCase
-from neuroanalysis.ui.psp_fitting import PspFitTestUi
-
-
+from neuroanalysis.fitting.psp import PspFitTestCase
 
 path = os.path.join(os.path.dirname(neuroanalysis.__file__), '..', 'test_data', 'evoked_synaptic_events', '*.pkl')
 psp_files = sorted(glob.glob(path))
@@ -15,6 +14,8 @@ test_ui = None
 
 @pytest.mark.parametrize('test_file', psp_files)
 def test_psp_fitting(request, test_file):
+    from neuroanalysis.ui.psp_fitting import PspFitTestUi
+
     global test_ui
     audit = request.config.getoption('audit')
     if audit and test_ui is None:

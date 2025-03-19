@@ -1,12 +1,14 @@
-import os, glob, pickle
-import pytest
+import glob
+import os
+
 import numpy as np
+import pytest
+
 import neuroanalysis
-from neuroanalysis.data import Recording, TSeries
+from neuroanalysis.data import TSeries
 from neuroanalysis.neuronsim.model_cell import ModelCell
-from neuroanalysis.units import pA, mV, MOhm, pF, us, ms
 from neuroanalysis.spike_detection import SpikeDetectTestCase, detect_evoked_spikes
-from neuroanalysis.ui.spike_detection import SpikeDetectTestUi
+from neuroanalysis.units import pA, MOhm, pF, us, ms
 
 path = os.path.join(os.path.dirname(neuroanalysis.__file__), '..', 'test_data', 'evoked_spikes', '*.pkl')
 spike_files = sorted(glob.glob(path))
@@ -17,8 +19,13 @@ test_ui = None
 @pytest.mark.parametrize('test_file', spike_files)
 def test_spike_detection(request, test_file):
     global test_ui
-    audit = request.config.getoption('audit')
+    try:
+        audit = request.config.getoption('audit')
+    except Exception:
+        audit = False
     if audit and test_ui is None:
+        from neuroanalysis.ui.spike_detection import SpikeDetectTestUi
+
         test_ui = SpikeDetectTestUi()
 
     print("test:", test_file)
@@ -71,16 +78,17 @@ def create_test_pulse(start=5*ms, pdur=10*ms, pamp=-10*pA, mode='ic', dt=10*us, 
     return result
 
 
-if __name__ == '__main__':
+def main():
+    global plt, dt, start, duration, pulse_edges, ui, test_pulse, ra, amp
+
     import pyqtgraph as pg
-    from neuroanalysis.spike_detection import SpikeDetectUI
+    from neuroanalysis.ui.spike_detection import SpikeDetectUI
 
     plt = pg.plot(labels={'left': ('Vm', 'V'), 'bottom': ('time', 's')})
-    dt = 10*us
-    start = 5*ms
-    duration = 2*ms
+    dt = 10 * us
+    start = 5 * ms
+    duration = 2 * ms
     pulse_edges = start, start + duration
-
     ui = SpikeDetectUI()
 
     def test_pulse(amp, ra):
@@ -98,11 +106,14 @@ if __name__ == '__main__':
         plt.plot(pri.time_values, pri.data, pen=pen)
 
     # Iterate over a series of increasing pulse amplitudes
-    for ra in [10*MOhm, 100*MOhm]:
-        for amp in np.arange(0*pA, 1500*pA, 100*pA):
+    for ra in [10 * MOhm, 100 * MOhm]:
+        for amp in np.arange(0 * pA, 1500 * pA, 100 * pA):
             print("Amp: %f   Raccess: %f" % (amp, ra))
             test_pulse(amp, ra)
 
             # redraw after every new test
             pg.QtWidgets.QApplication.processEvents()
-        
+
+
+if __name__ == '__main__':
+    main()

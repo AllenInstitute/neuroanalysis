@@ -1,6 +1,7 @@
-from __future__ import print_function
 from collections import OrderedDict
+
 import numpy as np
+
 from neuroanalysis.synaptic_release import ReleaseModel
 
 

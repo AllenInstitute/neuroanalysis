@@ -40,8 +40,12 @@ class H5BackedTestPulseStack:
 
     def _load_test_pulse_v2(self, tp):
         state = json.loads(tp.attrs['save'])
-        state['recording']['channels']['primary']['time_values'] = tp[:, 0]
-        state['recording']['channels']['primary']['data'] = tp[:, 1]
+        if tp.ndim == 1:
+            state['recording']['channels']['primary']['time_values'] = None
+            state['recording']['channels']['primary']['data'] = tp[:]
+        else:
+            state['recording']['channels']['primary']['time_values'] = tp[:, 0]
+            state['recording']['channels']['primary']['data'] = tp[:, 1]
         return PatchClampTestPulse.load(state)
 
     def merge(self, other: H5BackedTestPulseStack):
@@ -67,13 +71,17 @@ class H5BackedTestPulseStack:
         for grp in self._containing_groups:
             grp.file.flush()
 
-    def append(self, test_pulse: PatchClampTestPulse) -> tuple[str, str]:
+    def append(self, test_pulse: PatchClampTestPulse, retain_data=False) -> tuple[str, str]:
         """Append a test pulse to the stack. Returns the full path name of the dataset."""
         tp_dump = test_pulse.save()
         rec = tp_dump['recording']
         pri = rec['channels']['primary']
         del rec['channels']['command']
-        data = np.column_stack((pri['time_values'], pri['data']))
+        # TODO handle both dt and time_values without clobbering each other
+        if pri.get('time_values') is not None:
+            data = np.column_stack((pri['time_values'], pri['data']))
+        else:
+            data = pri['data']
         del rec['channels']['primary']['time_values']
         del rec['channels']['primary']['data']
         dataset = self._containing_groups[-1].create_dataset(
@@ -85,13 +93,15 @@ class H5BackedTestPulseStack:
         dataset.attrs['save'] = json.dumps(tp_dump)
         dataset.attrs['schema version'] = tp_dump['schema version']
 
-        self._test_pulses[test_pulse.recording.start_time] = test_pulse
+        self._test_pulses[test_pulse.recording.start_time] = test_pulse if retain_data else None
         self._np_timestamp_cache = np.append(self._np_timestamp_cache, test_pulse.recording.start_time)
 
         return dataset.file.filename, dataset.name
 
     def at_time(self, when: float) -> PatchClampTestPulse | None:
         """Return the test pulse at or immediately previous to the provided time."""
+        if not self._readable:
+            raise ValueError("This stack is not readable")
         keys = self._np_timestamp_cache
         idx = np.searchsorted(keys, when)
         if idx == 0:

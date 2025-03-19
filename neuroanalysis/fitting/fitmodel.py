@@ -139,6 +139,8 @@ class FitModel(LmfitModel):
     def show_interactive(self, fit=None):
         """ Show an interactive GUI for exploring fit parameters.
         """
+        from ..ui.fitting import FitExplorer
+
         if not hasattr(self, '_interactive_win'):
             self._interactive_win = FitExplorer(model=self, fit=fit)
         self._interactive_win.show()
