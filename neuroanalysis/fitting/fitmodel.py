@@ -9,7 +9,6 @@ try:
 except ImportError as exc:
     class LmfitModel:
         def __init__(self, *args, **kwds):
-            nonlocal exc
             raise exc
 
 from ..stats import weighted_std
