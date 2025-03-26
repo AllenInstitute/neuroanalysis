@@ -2,3 +2,4 @@
 neuroanalysis.egg-info
 build/
 dist/
+.aider*
