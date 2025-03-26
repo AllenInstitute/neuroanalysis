@@ -4,6 +4,10 @@ Neuroanalysis
 Modular and interactive tools for analysis of neurophysiology data, with emphasis on 
 patch-clamp electrophysiology.
 
+
+[![Tests](https://github.com/AllenInstitute/neuroanalysis/actions/workflows/test.yml/badge.svg)](https://github.com/AllenInstitute/neuroanalysis/actions/workflows/test.yml)
+[![PyPI version](https://badge.fury.io/py/neuroanalysis.svg)](https://badge.fury.io/py/neuroanalysis)
+
 * Functions for running common analysis algorithms
     * Synaptic/calcium event detection and characterization
     * Synaptic release modeling
