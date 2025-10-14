@@ -3,7 +3,7 @@ requires = ["setuptools >= 61.0"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
-packages = ["neuroanalysis"]
+packages = {find = {}}
 
 [tool.setuptools.dynamic]
 version = {attr = "neuroanalysis.__version__"}
