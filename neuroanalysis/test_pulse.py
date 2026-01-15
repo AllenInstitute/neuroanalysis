@@ -213,7 +213,10 @@ class PatchClampTestPulse(object):
             # shifting onto a path with a larger resistor).
             # https://electronics.stackexchange.com/questions/72185/what-is-tau-in-this-very-simple-circuit/72186#72186
             # See https://www.youtube.com/watch?v=4I5hswA45CM for full derivation.
-            cap = main_fit_tau * (1 / access_r + 1 / input_r)
+            if input_r <= 0 or access_r <= 0:
+                cap = float('nan')
+            else:
+                cap = main_fit_tau * (1 / access_r + 1 / input_r)
 
         else:  # IC mode
             base_v = base_median
