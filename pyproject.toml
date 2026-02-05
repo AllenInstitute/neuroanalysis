@@ -36,7 +36,6 @@ dependencies = [
     "numpy",
     "scipy",
     "h5py",
-    "neuron",
 ]
 
 [project.optional-dependencies]
@@ -45,6 +44,7 @@ dependencies = [
 "MIES" = []
 "test" = ["pytest"]
 "ui" = ["pyqtgraph"]
+"neuron_sim" = ["neuron"]
 
 [project.urls]
 homepage = "https://github.com/AllenInstitute/neuroanalysis"
