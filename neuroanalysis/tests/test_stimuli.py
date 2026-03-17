@@ -1,6 +1,7 @@
 from collections import OrderedDict
 
 import numpy as np
+import pytest
 
 import neuroanalysis.stimuli as stimuli
 from neuroanalysis.data.dataset import TSeries
@@ -295,6 +296,84 @@ def test_chirp():
     # test analytically determined frequencies
     freqs = f0 ** np.linspace(1, np.log(f1) / np.log(f0), len(t)+1)[:-1]
     assert np.allclose(freqs, stim.frequency_at(t))
+
+def test_validation():
+    # Sine: Nyquist check in eval
+    sine = stimuli.Sine(start_time=0, duration=0.1, frequency=100, amplitude=1)
+    with pytest.raises(ValueError):
+        sine.eval(n_pts=100, sample_rate=150)  # 150 < 2*100
+    sine.eval(n_pts=100, sample_rate=300)  # should be fine
+
+    # Sine: frequency must be positive
+    with pytest.raises(ValueError):
+        stimuli.Sine(start_time=0, duration=0.1, frequency=0, amplitude=1)
+    with pytest.raises(ValueError):
+        stimuli.Sine(start_time=0, duration=0.1, frequency=-5, amplitude=1)
+
+    # Sine: duration must be non-negative
+    with pytest.raises(ValueError):
+        stimuli.Sine(start_time=0, duration=-1, frequency=10, amplitude=1)
+
+    # Chirp: Nyquist check in eval (restore original check)
+    chirp = stimuli.Chirp(start_time=0, duration=0.1, start_frequency=10, end_frequency=100, amplitude=1)
+    with pytest.raises(ValueError):
+        chirp.eval(n_pts=100, sample_rate=150)  # 150 < 2*100
+    chirp.eval(n_pts=100, sample_rate=300)  # should be fine
+
+    # Chirp: frequencies must be positive
+    with pytest.raises(ValueError):
+        stimuli.Chirp(start_time=0, duration=0.1, start_frequency=0, end_frequency=100, amplitude=1)
+    with pytest.raises(ValueError):
+        stimuli.Chirp(start_time=0, duration=0.1, start_frequency=10, end_frequency=-1, amplitude=1)
+
+    # Chirp: duration must be positive
+    with pytest.raises(ValueError):
+        stimuli.Chirp(start_time=0, duration=0, start_frequency=10, end_frequency=100, amplitude=1)
+    with pytest.raises(ValueError):
+        stimuli.Chirp(start_time=0, duration=-1, start_frequency=10, end_frequency=100, amplitude=1)
+
+    # SquarePulse: duration must be non-negative
+    with pytest.raises(ValueError):
+        stimuli.SquarePulse(start_time=0, duration=-0.1, amplitude=1)
+
+    # SquarePulseTrain: n_pulses must be a positive integer
+    with pytest.raises(ValueError):
+        stimuli.SquarePulseTrain(start_time=0, n_pulses=0, pulse_duration=0.01, amplitude=1, interval=0.1)
+    with pytest.raises(ValueError):
+        stimuli.SquarePulseTrain(start_time=0, n_pulses=-3, pulse_duration=0.01, amplitude=1, interval=0.1)
+    with pytest.raises(TypeError):
+        stimuli.SquarePulseTrain(start_time=0, n_pulses=1.5, pulse_duration=0.01, amplitude=1, interval=0.1)
+
+    # SquarePulseTrain: interval must be >= pulse_duration
+    with pytest.raises(ValueError):
+        stimuli.SquarePulseTrain(start_time=0, n_pulses=3, pulse_duration=0.1, amplitude=1, interval=0.05)
+
+    # Ramp: duration must be non-negative
+    with pytest.raises(ValueError):
+        stimuli.Ramp(start_time=0, duration=-1, slope=1)
+
+    # Psp: rise_time must be positive
+    with pytest.raises(ValueError):
+        stimuli.Psp(start_time=0, rise_time=0, decay_tau=0.01, amplitude=1)
+    with pytest.raises(ValueError):
+        stimuli.Psp(start_time=0, rise_time=-0.01, decay_tau=0.01, amplitude=1)
+
+    # Psp: decay_tau must be positive
+    with pytest.raises(ValueError):
+        stimuli.Psp(start_time=0, rise_time=0.01, decay_tau=0, amplitude=1)
+    with pytest.raises(ValueError):
+        stimuli.Psp(start_time=0, rise_time=0.01, decay_tau=-0.01, amplitude=1)
+
+    # Psp: rise_power must be positive
+    with pytest.raises(ValueError):
+        stimuli.Psp(start_time=0, rise_time=0.01, decay_tau=0.01, amplitude=1, rise_power=0)
+    with pytest.raises(ValueError):
+        stimuli.Psp(start_time=0, rise_time=0.01, decay_tau=0.01, amplitude=1, rise_power=-1)
+
+    # SquarePulseSeries: mismatched array lengths should raise ValueError (not AssertionError)
+    with pytest.raises(ValueError):
+        stimuli.SquarePulseSeries(start_time=0, pulse_times=[0, 0.1], pulse_durations=[0.01], amplitudes=[1, 1])
+
 
 def test_find_noisy_square_pulses():
     dt = 0.0002
