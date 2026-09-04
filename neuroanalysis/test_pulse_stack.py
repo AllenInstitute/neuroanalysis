@@ -100,8 +100,6 @@ class H5BackedTestPulseStack:
 
     def at_time(self, when: float) -> PatchClampTestPulse | None:
         """Return the test pulse at or immediately previous to the provided time."""
-        if not self._readable:
-            raise ValueError("This stack is not readable")
         keys = self._np_timestamp_cache
         idx = np.searchsorted(keys, when)
         if idx == 0:
