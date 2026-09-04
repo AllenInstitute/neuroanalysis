@@ -14,11 +14,11 @@ test_ui = None
 
 @pytest.mark.parametrize('test_file', psp_files)
 def test_psp_fitting(request, test_file):
-    from neuroanalysis.ui.psp_fitting import PspFitTestUi
-
     global test_ui
     audit = request.config.getoption('audit')
     if audit and test_ui is None:
+        from neuroanalysis.ui.psp_fitting import PspFitTestUi
+
         test_ui = PspFitTestUi()
 
     print("test:", test_file)
