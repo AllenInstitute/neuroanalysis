@@ -379,6 +379,8 @@ class SquarePulse(Stimulus):
     _attributes = Stimulus._attributes + ['duration', 'amplitude']
 
     def __init__(self, start_time, duration, amplitude, description="square pulse", units=None, parent=None):
+        if duration < 0:
+            raise ValueError("duration must be non-negative")
         self.duration = duration
         self.amplitude = amplitude
         Stimulus.__init__(self, description=description, start_time=start_time, units=units, parent=parent)
@@ -518,6 +520,12 @@ class SquarePulseTrain(Stimulus):
     _attributes = Stimulus._attributes + ['n_pulses', 'pulse_duration', 'amplitude', 'interval']
 
     def __init__(self, start_time, n_pulses, pulse_duration, amplitude, interval, description="square pulse train", units=None, parent=None):
+        if not isinstance(n_pulses, int):
+            raise TypeError("n_pulses must be an integer")
+        if n_pulses < 1:
+            raise ValueError("n_pulses must be a positive integer")
+        if interval < pulse_duration:
+            raise ValueError("interval must be >= pulse_duration (pulses would overlap)")
         self.n_pulses = n_pulses
         self.pulse_duration = pulse_duration
         self.amplitude = amplitude
@@ -572,7 +580,8 @@ class SquarePulseSeries(Stimulus):
         self.pulse_times = pulse_times
         self.pulse_durations = pulse_durations
         self.amplitudes = amplitudes
-        assert len(pulse_times) == len(pulse_durations) == len(amplitudes)
+        if not (len(pulse_times) == len(pulse_durations) == len(amplitudes)):
+            raise ValueError("pulse_times, pulse_durations, and amplitudes must all have the same length")
         Stimulus.__init__(self, description=description, start_time=start_time, units=units, parent=parent)
 
         for i,t in enumerate(pulse_times):
@@ -613,6 +622,8 @@ class Ramp(Stimulus):
     _attributes = Stimulus._attributes + ['duration', 'slope', 'initial_amplitude']
 
     def __init__(self, start_time, duration, slope, offset=0, description="linear ramp", units=None, parent=None):
+        if duration < 0:
+            raise ValueError("duration must be non-negative")
         self.duration = duration
         self.slope = slope
         self.offset = offset
@@ -659,6 +670,10 @@ class Sine(Stimulus):
     _attributes = Stimulus._attributes + ['duration', 'frequency', 'amplitude', 'phase']
 
     def __init__(self, start_time, duration, frequency, amplitude, phase=0, offset=0, description="sine wave", units=None, parent=None):
+        if duration < 0:
+            raise ValueError("duration must be non-negative")
+        if frequency <= 0:
+            raise ValueError("frequency must be positive")
         self.duration = duration
         self.frequency = frequency
         self.amplitude = amplitude
@@ -667,11 +682,14 @@ class Sine(Stimulus):
         Stimulus.__init__(self, description=description, start_time=start_time, parent=parent, units=units)
 
     def eval(self, **kwds):
+        if kwds.get("sample_rate") is not None:
+            if self.frequency > kwds["sample_rate"] / 2:
+                raise ValueError("Sample rate must be at least twice the frequency of the sine wave.")
         trace = Stimulus.eval(self, **kwds)
         start = self.global_start_time
         chunk = trace.time_slice(start, start+self.duration, index_mode=kwds.get('index_mode'))
         chunk.data[:] += self.offset
-        
+
         t = chunk.time_values - start
         phase = self.phase_at(t)
         chunk.data[:] += self.amplitude * np.sin(phase)
@@ -759,6 +777,12 @@ class Chirp(Stimulus):
     _attributes = Stimulus._attributes + ['duration', 'start_frequency', 'end_frequency', 'amplitude', 'phase', 'offset']
 
     def __init__(self, start_time, duration, start_frequency, end_frequency, amplitude, phase=0, offset=0, description="frequency chirp", units=None, parent=None):
+        if duration <= 0:
+            raise ValueError("duration must be positive")
+        if start_frequency <= 0:
+            raise ValueError("start_frequency must be positive")
+        if end_frequency <= 0:
+            raise ValueError("end_frequency must be positive")
         self.duration = duration
         self.start_frequency = start_frequency
         self.end_frequency = end_frequency
@@ -768,6 +792,9 @@ class Chirp(Stimulus):
         Stimulus.__init__(self, description=description, start_time=start_time, parent=parent, units=units)
 
     def eval(self, **kwds):
+        if kwds.get("sample_rate") is not None:
+            if self.start_frequency > kwds["sample_rate"] / 2 or self.end_frequency > kwds["sample_rate"] / 2:
+                raise ValueError("Sample rate must be at least twice the maximum frequency in the chirp.")
         trace = Stimulus.eval(self, **kwds)
         start = self.global_start_time
         chunk = trace.time_slice(start, start + self.duration, index_mode=kwds.get('index_mode'))
@@ -837,6 +864,12 @@ class Psp(Stimulus):
     _attributes = Stimulus._attributes + ['rise_time', 'decay_tau', 'amplitude', 'rise_power']
 
     def __init__(self, start_time, rise_time, decay_tau, amplitude, rise_power=2, description="frequency chirp", units=None, parent=None):
+        if rise_time <= 0:
+            raise ValueError("rise_time must be positive")
+        if decay_tau <= 0:
+            raise ValueError("decay_tau must be positive")
+        if rise_power <= 0:
+            raise ValueError("rise_power must be positive")
         self.rise_time = rise_time
         self.decay_tau = decay_tau
         self.amplitude = amplitude
