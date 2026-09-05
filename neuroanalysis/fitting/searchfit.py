@@ -45,7 +45,7 @@ class SearchFit(object):
         # list of indices to iterate over complete parameter space
         slices = tuple([slice(0, len(p)) for p in self.parameter_space])
         all_inds = np.mgrid[slices]
-        self.all_inds = all_inds.reshape(all_inds.shape[0], np.product(all_inds.shape[1:])).T
+        self.all_inds = all_inds.reshape(all_inds.shape[0], np.prod(all_inds.shape[1:])).T
         
         self.results = None
         self._best_index = None

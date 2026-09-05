@@ -11,6 +11,23 @@ from ..util.jit import numba_jit
 from ..util.lru_cache import lru_cache
 
 
+def _null_profiler(*args):
+    """Stand-in for pyqtgraph's Profiler used when the optional ui dependency is absent."""
+
+
+def _make_profiler():
+    """Return a disabled pyqtgraph Profiler, or a no-op if pyqtgraph is unavailable.
+
+    pyqtgraph raises ImportError both when it is not installed and when no Qt binding
+    can be found, so fitting must not depend on it being importable.
+    """
+    try:
+        import pyqtgraph as pg
+    except ImportError:
+        return _null_profiler
+    return pg.debug.Profiler(disabled=True, delayed=False)
+
+
 class Psp(FitModel):
     """PSP-like fitting model defined as the product of rising and decaying exponentials.
     
@@ -222,8 +239,7 @@ def fit_psp(data, search_window, clamp_mode, sign=0, exp_baseline=True, baseline
     fit : lmfit.model.ModelResult
         Best fit
     """           
-    import pyqtgraph as pg
-    prof = pg.debug.Profiler(disabled=True, delayed=False)
+    prof = _make_profiler()
     prof("args: %s %s %s %s %s %s %s %s" % (search_window, clamp_mode, sign, exp_baseline, baseline_like_psp, refine, init_params, fit_kws))
     
     if ui is not None:
