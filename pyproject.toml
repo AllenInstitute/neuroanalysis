@@ -32,6 +32,7 @@ classifiers=[
     "Topic :: Software Development :: Libraries :: Python Modules",
 ]
 dynamic = ["version"]
+requires-python = ">=3.10"
 dependencies = [
     "numpy",
     "scipy",
@@ -42,7 +43,7 @@ dependencies = [
 "ACQ4" = ["acq4"]
 "jit" = ["numba"]
 "MIES" = []
-"test" = ["pytest"]
+"test" = ["pytest", "lmfit", "neuron"]
 "ui" = ["pyqtgraph"]
 "neuron_sim" = ["neuron"]
 
