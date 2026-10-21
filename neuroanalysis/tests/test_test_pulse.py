@@ -64,10 +64,12 @@ def test_leaky_cell():
     check_analysis(tp, tp_kwds)
 
 
+@pytest.mark.xfail(reason="not yet implemented", strict=True)
 def test_with_60Hz_noise():
     assert False  # TODO
 
 
+@pytest.mark.xfail(reason="not yet implemented", strict=True)
 def test_with_12kHz_noise():
     assert False  # TODO
 
