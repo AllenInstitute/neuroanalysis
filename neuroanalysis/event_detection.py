@@ -1,5 +1,6 @@
 import numpy as np
 import scipy.optimize
+from scipy.integrate import trapezoid
 from .data import TSeries
 from .fitting.psp import Psp
 
@@ -296,7 +297,7 @@ def threshold_events(trace, threshold, adjust_times=True, baseline=0.0, omit_end
             i2 = i1 + ev['len']
             ev['time'] = trace.time_at(i1)
             ev['duration'] = trace.time_at(i2) - ev['time']
-            ev['area'] = np.trapz(y=data1[i1:i2], x=trace.time_values[i1:i2])
+            ev['area'] = trapezoid(y=data1[i1:i2], x=trace.time_values[i1:i2])
             ev['peak_time'] = trace.time_at(ev['peak_index'])
     else:
         ev['time'] = np.nan
