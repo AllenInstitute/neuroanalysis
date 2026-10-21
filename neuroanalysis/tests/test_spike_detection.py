@@ -1,5 +1,6 @@
 import glob
 import os
+import pickle
 
 import numpy as np
 import pytest
@@ -35,6 +36,26 @@ def test_spike_detection(request, test_file):
         tc.audit_test(test_ui)
     else:
         tc.run_test()
+
+
+@pytest.mark.xfail(reason="vc refractory keeps the first event, not the strongest", strict=True)
+def test_strong_spike_is_not_masked_by_a_weaker_earlier_event():
+    """A weak event must not suppress a steeper spike inside the refractory window.
+
+    In this sweep the genuine spike is an order of magnitude steeper than the noise
+    preceding it, but two noise events fall within 1 ms and used to claim the spike
+    slots first, leaving the real spike discarded as "too soon after a spike".
+    """
+    path = os.path.join(
+        os.path.dirname(neuroanalysis.__file__), '..', 'test_data', 'evoked_spikes',
+        '1484952266.115_0_6_1.346.pkl')
+    with open(path, 'rb') as fh:
+        case = pickle.load(fh)
+
+    spikes = detect_evoked_spikes(**case['input_args'])
+
+    # the steepest slope present in this sweep belongs to the genuine spike
+    assert min(s['max_slope'] for s in spikes) < -4e-6
 
 
 def test_model_spike_detection():
