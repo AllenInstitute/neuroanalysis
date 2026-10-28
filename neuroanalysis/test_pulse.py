@@ -336,6 +336,18 @@ class PatchClampTestPulse(object):
             self.label_for_plot(plt.getPlotItem())
         return plt
 
+    def label_text(self):
+        """Return the HTML summary of the analysis values shown by label_for_plot."""
+        import pyqtgraph as pg
+
+        abbrevs = self._analysis_labels()
+        text = "Estimated:<br/>" + "<br/>".join([
+            f"{abbrevs[key][1]}: {pg.siFormat(val, suffix=abbrevs[key][0])}"
+            for key, val in self.analysis.items()
+            if val is not None and key in abbrevs
+        ])
+        return text.strip()
+
     def label_for_plot(self, plt):
         import pyqtgraph as pg
 
@@ -345,13 +357,7 @@ class PatchClampTestPulse(object):
             angle=0,
             pen=pg.mkPen((180, 180, 240), dash=[3, 4]),
         ))
-        abbrevs = self._analysis_labels()
-        text = "Estimated:<br/>" + "<br/>".join([
-            f"{abbrevs[key][1]}: {pg.siFormat(val, suffix=abbrevs[key][0])}"
-            for key, val in self.analysis.items()
-            if val is not None and key in abbrevs
-        ])
-        label = pg.LabelItem(text.strip(), color=(180, 180, 240))
+        label = pg.LabelItem(self.label_text(), color=(180, 180, 240))
         label.setParentItem(plt.vb)
         label.setPos(5, 5)
         return label
