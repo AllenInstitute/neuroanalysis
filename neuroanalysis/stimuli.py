@@ -92,7 +92,7 @@ class Stimulus(object):
                 old_parent.remove_item(self)
             except ValueError:
                 pass  # already removed
-        if new_parent is not None and self not in new_parent.items:
+        if new_parent is not None and not any(item is self for item in new_parent.items):
             new_parent.append_item(self)
 
     @property
@@ -112,9 +112,12 @@ class Stimulus(object):
     def remove_item(self, item):
         """Remove an item from the list of child stimuli.
 
-        The item's parent will be set to None.
+        The item's parent will be set to None. Items are matched by identity, not equality.
         """
-        self._items.remove(item)
+        index = next((i for i, x in enumerate(self._items) if x is item), None)
+        if index is None:
+            raise ValueError("item is not a child of this stimulus")
+        del self._items[index]
         item.parent = None
 
     def insert_item(self, index, item):
@@ -159,7 +162,7 @@ class Stimulus(object):
     def total_duration(self):
         """The total duration of this stimulus and all of its children.
         """
-        return self.global_end_time - self.global_start_time
+        return self.total_global_end_time - self.global_start_time
 
     @property
     def total_global_end_time(self):
@@ -245,12 +248,14 @@ class Stimulus(object):
         return '<{class_name} "{desc}" 0x{id:x}>'.format(class_name=type(self).__name__, desc=self.description, id=id(self))
 
     def __eq__(self, other):
+        if not isinstance(other, Stimulus):
+            return NotImplemented
         if self.type != other.type:
             return False
         if len(self.items) != len(other.items):
             return False
         for name in self._attributes:
-            if getattr(self, name) != getattr(other, name):
+            if self._save_value(getattr(self, name)) != self._save_value(getattr(other, name)):
                 return False
         for i in range(len(self.items)):
             if self.items[i] != other.items[i]:
@@ -274,12 +279,14 @@ class Stimulus(object):
 
     @classmethod
     def _save_value(cls, val):
-        if isinstance(val, np.floating):
-            return float(val)
-        elif isinstance(val, np.integer):
-            return int(val)
-        else:
-            return val
+        """Convert numpy scalars, arrays, and tuples to JSON-compatible Python types."""
+        if isinstance(val, np.ndarray):
+            return val.tolist()
+        if isinstance(val, np.generic):
+            return val.item()
+        if isinstance(val, (list, tuple)):
+            return [cls._save_value(v) for v in val]
+        return val
 
     @classmethod
     def load(cls, state):
@@ -288,20 +295,25 @@ class Stimulus(object):
         """
         item_type = state['type']
         item_class = cls.get_stimulus_class(item_type)
-        child_items = [cls.load(item_state) for item_state in state.get('items', [])]
-        if len(child_items) > 0:
-            return item_class(items=child_items, **state.get('args', {}))
-        else:
-            return item_class(**state.get('args', {}))
+        item = item_class(**state.get('args', {}))
+        for item_state in state.get('items', []):
+            item.append_item(cls.load(item_state))
+        return item
 
     @classmethod
     def get_stimulus_class(cls, name):
-        if name not in cls._subclasses:
-            cls._subclasses = {sub.__name__:sub for sub in cls.__subclasses__()}
-            cls._subclasses[cls.__name__] = cls
-        if name not in cls._subclasses:
+        """Return the Stimulus class or descendant (at any depth) named *name*."""
+        registry = Stimulus._subclasses
+        if name not in registry:
+            registry.clear()
+            todo = [Stimulus]
+            while todo:
+                sub = todo.pop()
+                registry[sub.__name__] = sub
+                todo.extend(sub.__subclasses__())
+        if name not in registry:
             raise KeyError('Unknown stimulus class "%s"' % name)
-        return cls._subclasses[name]
+        return registry[name]
 
 
 class LazyLoadStimulus(Stimulus):
@@ -322,6 +334,12 @@ class LazyLoadStimulus(Stimulus):
             for item in items:
                 self.append_item(item)
         return tuple(self._items)
+
+    def save(self):
+        """Save as a plain Stimulus containing the loaded items (the loader is not serializable)."""
+        state = Stimulus.save(self)
+        state['type'] = 'Stimulus'
+        return state
 
 
 class Offset(Stimulus):
@@ -576,7 +594,7 @@ class SquarePulseSeries(Stimulus):
     """
     _attributes = Stimulus._attributes + ['pulse_times', 'pulse_durations', 'amplitudes']
 
-    def __init__(self, start_time, pulse_times, pulse_durations, amplitudes, description="square pulse train", units=None, parent=None):
+    def __init__(self, start_time, pulse_times, pulse_durations, amplitudes, description="square pulse series", units=None, parent=None):
         self.pulse_times = pulse_times
         self.pulse_durations = pulse_durations
         self.amplitudes = amplitudes
@@ -619,7 +637,7 @@ class Ramp(Stimulus):
     units : str | None
         Optional string describing the units of values in the stimulus.
     """
-    _attributes = Stimulus._attributes + ['duration', 'slope', 'initial_amplitude']
+    _attributes = Stimulus._attributes + ['duration', 'slope', 'offset']
 
     def __init__(self, start_time, duration, slope, offset=0, description="linear ramp", units=None, parent=None):
         if duration < 0:
@@ -633,7 +651,7 @@ class Ramp(Stimulus):
         trace = Stimulus.eval(self, **kwds)
         start = self.global_start_time
         region = trace.time_slice(start, start + self.duration, index_mode=kwds.get('index_mode'))
-        region.data[:] += np.arange(len(region)) * self.slope + self.offset
+        region.data[:] += (region.time_values - start) * self.slope + self.offset
         return trace
 
     def mask(self, **kwds):
@@ -667,7 +685,7 @@ class Sine(Stimulus):
     units : str | None
         Optional string describing the units of values in the stimulus.
     """
-    _attributes = Stimulus._attributes + ['duration', 'frequency', 'amplitude', 'phase']
+    _attributes = Stimulus._attributes + ['duration', 'frequency', 'amplitude', 'phase', 'offset']
 
     def __init__(self, start_time, duration, frequency, amplitude, phase=0, offset=0, description="sine wave", units=None, parent=None):
         if duration < 0:
@@ -817,6 +835,8 @@ class Chirp(Stimulus):
         """Return the phase of the chirp at time (or array of times) *t* relative
         to the start of the chirp.
         """
+        if self.start_frequency == self.end_frequency:
+            return self.phase + 2 * np.pi * self.start_frequency * t
         k, r = self._kr()
         w = k * r ** (t / self.duration)
         return self.phase - k + w
@@ -826,6 +846,8 @@ class Chirp(Stimulus):
         to the start of the chirp.
         """
         # f(t) = k ln(r) r^(t/d) / (2 π d)
+        if self.start_frequency == self.end_frequency:
+            return self.start_frequency + 0 * np.asarray(t, dtype=float)
         k, r = self._kr()
         d = self.duration
         return k * np.log(r) * r ** (t/d) / (2 * np.pi * d)
@@ -863,7 +885,7 @@ class Psp(Stimulus):
     """
     _attributes = Stimulus._attributes + ['rise_time', 'decay_tau', 'amplitude', 'rise_power']
 
-    def __init__(self, start_time, rise_time, decay_tau, amplitude, rise_power=2, description="frequency chirp", units=None, parent=None):
+    def __init__(self, start_time, rise_time, decay_tau, amplitude, rise_power=2, description="PSP", units=None, parent=None):
         if rise_time <= 0:
             raise ValueError("rise_time must be positive")
         if decay_tau <= 0:
