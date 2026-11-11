@@ -21,6 +21,7 @@ def test_stimulus():
     # test save/load
     state = s1.save()
     assert state == OrderedDict([
+        ('schema_version', stimuli.STIMULUS_SCHEMA_VERSION),
         ('type', 'Stimulus'),
         ('args', OrderedDict([
             ('start_time', 0), 
@@ -110,6 +111,7 @@ def test_square_pulse():
     # test save/load
     state = sp1.save()
     assert state == OrderedDict([
+        ('schema_version', stimuli.STIMULUS_SCHEMA_VERSION),
         ('type', 'SquarePulse'),
         ('args', OrderedDict([
             ('start_time', 0.1), 
@@ -170,6 +172,7 @@ def test_pulse_train():
     # test save/load
     state = s1.save()
     assert state == OrderedDict([
+        ('schema_version', stimuli.STIMULUS_SCHEMA_VERSION),
         ('type', 'Stimulus'),
         ('args', OrderedDict([
             ('start_time', 0),
@@ -974,3 +977,360 @@ def test_lazy_load_once():
     assert loader.calls == []
     assert len(stim.items) == 2
     assert loader.calls == ['rec']
+
+
+# --- named inputs ---
+
+def _iter_states(state):
+    """Yield *state* and every nested child/input state."""
+    yield state
+    for child in state.get('items', []):
+        yield from _iter_states(child)
+    for child in state.get('inputs', {}).values():
+        yield from _iter_states(child)
+
+
+def test_inputs_are_not_children():
+    duty = stimuli.Offset(amplitude=0.3, start_time=0.02)
+    parent = stimuli.Stimulus(start_time=0.05)
+    pwm = stimuli.Pwm(start_time=0.1, duration=0.2, period=0.05, amplitude=1.0, duty=duty, parent=parent)
+    assert pwm.items == ()
+    assert pwm.inputs == {'duty': duty}
+    assert duty.parent is None
+    assert duty.owner is pwm
+    assert parent.items == (pwm,)
+    # input start_time is relative to the host's global start
+    assert duty.global_start_time == pytest.approx(0.05 + 0.1 + 0.02)
+
+    # mask covers the host's region only, not the input's (which runs to the end of the trace)
+    mask = pwm.mask(t0=0, n_pts=N_PTS, dt=DT).data
+    expected = np.zeros(N_PTS, dtype=bool)
+    expected[150:350] = True
+    assert np.array_equal(mask.astype(bool), expected)
+
+    # an input cannot also be a child, and a child cannot be an input
+    with pytest.raises(ValueError):
+        duty.parent = parent
+    child = stimuli.Offset(amplitude=0.5, start_time=0, parent=parent)
+    with pytest.raises(ValueError):
+        stimuli.Pwm(start_time=0, duration=0.1, period=0.01, amplitude=1, duty=child)
+    # an input cannot have two owners
+    with pytest.raises(ValueError):
+        stimuli.Pwm(start_time=0, duration=0.1, period=0.01, amplitude=1, duty=duty)
+    with pytest.raises(TypeError):
+        stimuli.Pwm(start_time=0, duration=0.1, period=0.01, amplitude=1, duty=0.5)
+
+    # reassigning an input releases the old one
+    new_duty = stimuli.Offset(amplitude=0.6, start_time=0)
+    pwm.duty = new_duty
+    assert new_duty.owner is pwm
+    assert duty.owner is None
+
+
+def test_nested_inputs_round_trip():
+    root = stimuli.Stimulus(description="root", start_time=0.05, units='A')
+    stimuli.SquarePulse(start_time=0.01, duration=0.02, amplitude=-1.0, parent=root)
+    stimuli.Filter(
+        input=stimuli.Noise(start_time=0.1, duration=0.3, sigma=0.5, mean=0.1, noise_type='brown', seed=11),
+        filter_type='butterworth', cutoff=80.0, order=3, start_time=0.02, parent=root,
+    )
+    stimuli.Pwm(
+        start_time=0.5, duration=0.4, period=0.04, amplitude=2.0, parent=root,
+        duty=stimuli.Sine(start_time=0, duration=0.4, frequency=2.0, amplitude=0.4, offset=0.5),
+    )
+    # input with children, and an input that has its own input
+    duty_sum = stimuli.Stimulus(items=[
+        stimuli.Sine(start_time=0, duration=0.3, frequency=5.0, amplitude=0.2, phase=0.3),
+        stimuli.Offset(amplitude=0.5, start_time=0),
+    ])
+    inner_pwm = stimuli.Pwm(start_time=0.01, duration=0.3, period=0.03, amplitude=1.0, duty=duty_sum)
+    filtered_pwm = stimuli.Filter(input=inner_pwm, filter_type='gaussian', cutoff=200.0, start_time=1.0, parent=root)
+    assert duty_sum.items[0].global_start_time == pytest.approx(0.05 + 1.0 + 0.01)
+
+    loaded = _check_round_trip(root)
+    assert loaded.items[3].input.duty.items[1].amplitude == 0.5
+    assert loaded.items[3].input.owner is loaded.items[3]
+    assert loaded.items[3].input.duty.owner is loaded.items[3].input
+
+    # version is written on the root only
+    state = root.save()
+    assert state['schema_version'] == stimuli.STIMULUS_SCHEMA_VERSION
+    nested = list(_iter_states(state))[1:]
+    assert len(nested) == 10
+    assert all('schema_version' not in s for s in nested)
+
+    # differing nested input makes the hierarchies unequal
+    other = stimuli.Stimulus.load(state)
+    other.items[3].input.duty.items[1].amplitude = 0.4
+    assert other != root
+    assert not np.array_equal(_eval(other), _eval(root))
+
+
+# --- schema version ---
+
+def test_schema_version():
+    stim = stimuli.Sine(start_time=0.1, duration=0.2, frequency=10, amplitude=1, offset=0.25)
+    state = stim.save()
+    assert state['schema_version'] == stimuli.STIMULUS_SCHEMA_VERSION
+
+    legacy = {k: v for k, v in state.items() if k != 'schema_version'}
+    assert stimuli.Stimulus.load(legacy) == stim
+
+    # hand-written legacy state predating Sine's saved offset
+    old = {'type': 'Sine', 'args': {'start_time': 0.1, 'description': 'sine wave', 'units': None,
+           'duration': 0.2, 'frequency': 10, 'amplitude': 1, 'phase': 0}, 'items': []}
+    assert stimuli.load_stimulus(old).offset == 0
+
+    future = dict(state, schema_version=stimuli.STIMULUS_SCHEMA_VERSION + 1)
+    with pytest.raises(ValueError, match="schema version"):
+        stimuli.Stimulus.load(future)
+
+
+# --- Noise ---
+
+def test_noise_params():
+    stim = stimuli.Noise(start_time=0.1, duration=0.5, sigma=0.3, mean=-0.2, noise_type='white', seed=123, description="n", units='A')
+    result = stim.eval(t0=0, n_pts=N_PTS, dt=DT)
+    assert result.units == 'A'
+    data = result.data
+    assert np.all(data[:100] == 0)
+    assert np.all(data[600:] == 0)
+    window = data[100:600]
+    assert np.isclose(window.mean(), -0.2, atol=1e-12)
+    assert np.isclose(window.std(), 0.3, rtol=1e-12)
+
+    # white noise is the seeded normal draw, rescaled to the requested mean and std
+    x = np.random.default_rng(123).standard_normal(500)
+    assert np.allclose(window, (x - x.mean()) / x.std() * 0.3 - 0.2, rtol=0, atol=1e-12)
+
+    for noise_type in ('pink', 'brown', 'blue', 'violet'):
+        colored = _eval(stimuli.Noise(start_time=0.1, duration=0.5, sigma=0.3, mean=-0.2, noise_type=noise_type, seed=123))
+        assert np.isclose(colored[100:600].mean(), -0.2, atol=1e-12)
+        assert np.isclose(colored[100:600].std(), 0.3, rtol=1e-12)
+        assert np.all(colored[:100] == 0) and np.all(colored[600:] == 0)
+
+    loaded = _check_round_trip(stim)
+    assert (loaded.sigma, loaded.mean, loaded.noise_type, loaded.seed) == (0.3, -0.2, 'white', 123)
+
+
+def test_noise_seeds():
+    kwds = dict(start_time=0.1, duration=0.5, sigma=1.0, noise_type='pink')
+    a = _eval(stimuli.Noise(seed=5, **kwds))
+    assert np.array_equal(a, _eval(stimuli.Noise(seed=5, **kwds)))
+    assert not np.allclose(a, _eval(stimuli.Noise(seed=6, **kwds)))
+
+    # seed=None picks a seed that is saved, so the reloaded noise reproduces exactly
+    s1 = stimuli.Noise(**kwds)
+    s2 = stimuli.Noise(**kwds)
+    assert isinstance(s1.seed, int)
+    assert s1.seed != s2.seed
+    assert not np.allclose(_eval(s1), _eval(s2))
+    _check_round_trip(s1)
+
+
+@pytest.mark.parametrize('noise_type, exponent', [('white', 0), ('pink', -1), ('brown', -2), ('blue', 1), ('violet', 2)])
+def test_noise_spectrum(noise_type, exponent):
+    import scipy.signal
+    dt = 1e-4
+    n = 2 ** 16
+    stim = stimuli.Noise(start_time=0, duration=n * dt, sigma=1.0, noise_type=noise_type, seed=42)
+    data = stim.eval(t0=0, n_pts=n + 10, dt=dt).data[:n]
+    freqs, psd = scipy.signal.welch(data, fs=1 / dt, nperseg=4096)
+    band = (freqs >= 10) & (freqs <= 1000)
+    slope = np.polyfit(np.log10(freqs[band]), np.log10(psd[band]), 1)[0]
+    assert abs(slope - exponent) < 0.1
+
+
+def test_noise_validation():
+    with pytest.raises(ValueError):
+        stimuli.Noise(start_time=0, duration=-1, sigma=1)
+    with pytest.raises(ValueError):
+        stimuli.Noise(start_time=0, duration=1, sigma=-1)
+    with pytest.raises(ValueError):
+        stimuli.Noise(start_time=0, duration=1, sigma=1, noise_type='grey')
+
+
+# --- Pwm ---
+
+def _pwm_expected(on_samples, start_ind, cycle_samples, amplitude, n_pts=N_PTS, last_cycle_samples=None):
+    expected = np.zeros(n_pts)
+    for k, on in enumerate(on_samples):
+        i0 = start_ind + k * cycle_samples
+        if last_cycle_samples is not None and k == len(on_samples) - 1:
+            on = min(on, last_cycle_samples)
+        expected[i0:i0 + on] = amplitude
+    return expected
+
+
+def test_pwm_constant_duty():
+    stim = stimuli.Pwm(
+        start_time=0.1, duration=0.52, period=0.05, amplitude=2.5,
+        duty=stimuli.Offset(amplitude=0.3, start_time=0), description="pwm", units='V',
+    )
+    result = stim.eval(t0=0, n_pts=N_PTS, dt=DT)
+    assert result.units == 'V'
+    # 0.3 * 50 samples = 15 on; final cycle is cut to 20 samples (still 15 on)
+    expected = _pwm_expected([15] * 11, start_ind=100, cycle_samples=50, amplitude=2.5)
+    assert np.array_equal(result.data, expected)
+    loaded = _check_round_trip(stim)
+    assert (loaded.period, loaded.amplitude, loaded.duty.amplitude) == (0.05, 2.5, 0.3)
+
+    # duty above 1 in a truncated final cycle fills only up to the end of the window
+    full = stimuli.Pwm(start_time=0.1, duration=0.52, period=0.05, amplitude=1.0, duty=stimuli.Offset(amplitude=0.6, start_time=0))
+    expected = _pwm_expected([30] * 11, start_ind=100, cycle_samples=50, amplitude=1.0, last_cycle_samples=20)
+    assert np.array_equal(_eval(full), expected)
+
+
+def test_pwm_ramp_duty():
+    # duty(t) = 2t over each 50-sample cycle k: mean = 0.1k + 0.049 -> round(50 * mean) = 5k + 2 samples on
+    stim = stimuli.Pwm(start_time=0.1, duration=0.5, period=0.05, amplitude=1.0, duty=stimuli.Ramp(start_time=0, duration=0.5, slope=2.0))
+    expected = _pwm_expected([5 * k + 2 for k in range(10)], start_ind=100, cycle_samples=50, amplitude=1.0)
+    assert np.array_equal(_eval(stim), expected)
+
+    # duty = 4t - 0.2: means 0.2k - 0.102, clipped to [0, 1] -> 0, 5, 15, 25, 35, 45, then fully on
+    clipped = stimuli.Pwm(start_time=0.1, duration=0.5, period=0.05, amplitude=1.0, duty=stimuli.Ramp(start_time=0, duration=0.5, slope=4.0, offset=-0.2))
+    expected = _pwm_expected([0, 5, 15, 25, 35, 45, 50, 50, 50, 50], start_ind=100, cycle_samples=50, amplitude=1.0)
+    assert np.array_equal(_eval(clipped), expected)
+    _check_round_trip(clipped)
+
+
+def test_pwm_sine_duty():
+    duty = stimuli.Sine(start_time=0, duration=0.4, frequency=2.5, amplitude=0.4, offset=0.5)
+    stim = stimuli.Pwm(start_time=0.2, duration=0.4, period=0.04, amplitude=1.0, duty=duty)
+    t = np.arange(400) * DT
+    duty_values = 0.5 + 0.4 * np.sin(2 * np.pi * 2.5 * t)
+    on = [int(round(40 * duty_values[40 * k:40 * (k + 1)].mean())) for k in range(10)]
+    expected = _pwm_expected(on, start_ind=200, cycle_samples=40, amplitude=1.0)
+    assert np.array_equal(_eval(stim), expected)
+    _check_round_trip(stim)
+
+
+def test_pwm_validation():
+    duty = stimuli.Offset(amplitude=0.5, start_time=0)
+    with pytest.raises(ValueError):
+        stimuli.Pwm(start_time=0, duration=-1, period=0.01, amplitude=1, duty=duty)
+    with pytest.raises(ValueError):
+        stimuli.Pwm(start_time=0, duration=1, period=0, amplitude=1, duty=duty)
+
+
+# --- Filter ---
+
+FILTER_DT = 1e-4
+
+
+def _filtered_sine_gain(filter_type, freq, cutoff, order=4):
+    sine = stimuli.Sine(start_time=0, duration=1.0, frequency=freq, amplitude=1.0)
+    stim = stimuli.Filter(input=sine, filter_type=filter_type, cutoff=cutoff, order=order)
+    data = stim.eval(t0=0, n_pts=12000, dt=FILTER_DT).data
+    # rms over an integer number of periods in steady state
+    n_period = int(round(1 / (freq * FILTER_DT)))
+    window = data[4000:4000 + n_period * int(4000 / n_period)]
+    return np.sqrt(2) * np.sqrt(np.mean(window ** 2))
+
+
+@pytest.mark.parametrize('filter_type', ['bessel', 'butterworth', 'gaussian'])
+def test_filter_cutoff(filter_type):
+    cutoff = 100.0
+    assert np.isclose(_filtered_sine_gain(filter_type, cutoff, cutoff), 1 / np.sqrt(2), rtol=0.01)
+    assert np.isclose(_filtered_sine_gain(filter_type, cutoff / 10, cutoff), 1.0, rtol=0.01)
+
+
+def test_filter_stopband():
+    # butterworth: |H(f)| = 1 / sqrt(1 + (f / fc)^(2n))
+    assert np.isclose(_filtered_sine_gain('butterworth', 200.0, 100.0, order=6), 1 / np.sqrt(1 + 2 ** 12), rtol=0.03)
+    # gaussian: |H(f)| = 2^(-(f / fc)^2 / 2)
+    assert np.isclose(_filtered_sine_gain('gaussian', 200.0, 100.0), 0.25, rtol=0.01)
+
+
+def _step_response(filter_type, order=4):
+    pulse = stimuli.SquarePulse(start_time=0.1, duration=0.3, amplitude=1.0)
+    stim = stimuli.Filter(input=pulse, filter_type=filter_type, cutoff=100.0, order=order, start_time=0.05)
+    return stim, stim.eval(t0=0, n_pts=8000, dt=FILTER_DT).data
+
+
+@pytest.mark.parametrize('filter_type, max_overshoot', [('bessel', 0.015), ('butterworth', 0.15)])
+def test_filter_causal_step(filter_type, max_overshoot):
+    stim, data = _step_response(filter_type)
+    on, off = 1500, 4500  # pulse at global 0.15-0.45 s
+    assert stim.duration == pytest.approx(0.4)
+    assert np.all(data[:on] == 0)
+    assert data[on + 5] > 0
+    assert np.isclose(data[off - 1], 1.0, atol=1e-3)
+    overshoot = data[on:off].max() - 1.0
+    assert 0 <= overshoot < max_overshoot
+    # tail after the input ends decays toward zero
+    assert data[off + 5] > 0.5
+    assert abs(data[-1]) < 1e-3
+    if filter_type == 'butterworth':
+        assert overshoot > 0.05  # 4th-order butterworth overshoots ~11%
+
+
+def test_filter_gaussian_step():
+    stim, data = _step_response('gaussian')
+    on, off = 1500, 4500
+    # symmetric kernel: the rising edge is antisymmetric about the step
+    k = np.arange(100)
+    assert np.allclose(data[on + k] + data[on - 1 - k], 1.0, atol=1e-9)
+    assert np.allclose(data[off + k] + data[off - 1 - k], 1.0, atol=1e-9)
+    assert data[on - 5] > 0  # smoothing extends before the input's edge
+    assert np.isclose(data[3000], 1.0)
+    assert data[0] == 0 and data[-1] == 0
+
+
+def test_filter_params():
+    noise = stimuli.Noise(start_time=0.1, duration=0.3, sigma=1.0, noise_type='white', seed=7)
+    stim = stimuli.Filter(input=noise, filter_type='butterworth', cutoff=50.0, order=2, start_time=0.05, description="lp", units='A')
+    result = stim.eval(t0=0, n_pts=N_PTS, dt=DT)
+    assert result.units == 'A'
+    assert stim.inputs == {'input': noise}
+    assert noise.global_start_time == pytest.approx(0.15)
+    assert stim.duration == pytest.approx(0.4)
+    assert np.all(result.data[:150] == 0)
+    # filtering reduces the variance of white noise
+    assert result.data[150:450].std() < 0.5
+    mask = stim.mask(t0=0, n_pts=N_PTS, dt=DT).data.astype(bool)
+    assert np.array_equal(np.where(mask)[0], np.arange(50, 450))
+    loaded = _check_round_trip(stim)
+    assert (loaded.filter_type, loaded.cutoff, loaded.order) == ('butterworth', 50.0, 2)
+
+
+@pytest.mark.parametrize('filter_type', ['bessel', 'butterworth', 'gaussian'])
+def test_filter_constant_input(filter_type):
+    # an input already present at the trace start has no startup transient
+    stim = stimuli.Filter(input=stimuli.Offset(amplitude=2.0, start_time=-1.0), filter_type=filter_type, cutoff=100.0)
+    assert np.allclose(stim.eval(t0=0, n_pts=2000, dt=FILTER_DT).data, 2.0, rtol=0, atol=1e-9)
+
+
+def test_filter_validation():
+    pulse = stimuli.SquarePulse(start_time=0, duration=0.1, amplitude=1)
+    with pytest.raises(ValueError):
+        stimuli.Filter(input=pulse, filter_type='chebyshev', cutoff=100)
+    with pytest.raises(ValueError):
+        stimuli.Filter(input=pulse, filter_type='bessel', cutoff=0)
+    with pytest.raises(ValueError):
+        stimuli.Filter(input=pulse, filter_type='bessel', cutoff=100, order=0)
+    with pytest.raises(ValueError):
+        stimuli.Filter(input=pulse, filter_type='bessel', cutoff=100, order=1.5)
+    with pytest.raises(TypeError):
+        stimuli.Filter(input=None, filter_type='bessel', cutoff=100)
+    stim = stimuli.Filter(input=pulse, filter_type='bessel', cutoff=100)
+    with pytest.raises(ValueError):
+        stim.eval(time_values=np.array([0, 0.001, 0.003, 0.004]))
+
+
+def test_input_classes_trace_end():
+    noise = stimuli.Noise(start_time=1.9, duration=1.0, sigma=0.5, seed=1)
+    data = _eval(noise)
+    assert np.all(data[:1900] == 0)
+    assert data[-1] != 0
+    assert np.isclose(data[1900:].std(), 0.5)
+
+    pwm = stimuli.Pwm(start_time=1.95, duration=0.2, period=0.05, amplitude=1.0, duty=stimuli.Offset(amplitude=1.0, start_time=0))
+    expected = np.zeros(N_PTS)
+    expected[1950:] = 1.0
+    assert np.array_equal(_eval(pwm), expected)
+    late = stimuli.Pwm(start_time=2.5, duration=0.2, period=0.05, amplitude=1.0, duty=stimuli.Offset(amplitude=1.0, start_time=0))
+    assert np.array_equal(_eval(late), np.zeros(N_PTS))
+
+    filt = stimuli.Filter(input=stimuli.SquarePulse(start_time=1.9, duration=0.5, amplitude=1.0), filter_type='bessel', cutoff=100.0)
+    assert filt.mask(t0=0, n_pts=N_PTS, dt=DT).data[-1]

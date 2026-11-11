@@ -1,6 +1,8 @@
 import numbers
 
 import numpy as np
+import scipy.ndimage
+import scipy.signal
 from .util.custom_weakref import WeakRef
 from .data import TSeries
 from .fitting import psp
@@ -62,6 +64,11 @@ def _eval_sample_rate(kwds):
     return None
 
 
+# Version of the saved stimulus state: the set of stimulus classes, their parameters, and their
+# eval output. Bump it on any change to any of these. States without a version are legacy (0).
+STIMULUS_SCHEMA_VERSION = 1
+
+
 def load_stimulus(state):
     """Re-create a Stimulus structure from a previously saved state.
 
@@ -89,6 +96,10 @@ class Stimulus(object):
     parent : Stimulus | None
         An optional parent Stimulus instance.
 
+    Subclasses may declare named inputs in ``_inputs``: Stimulus-valued attributes that are
+    evaluated separately and used by the host's eval, rather than summed into it. Inputs are not
+    in ``items``; an input's ``start_time`` is relative to its host's global start time.
+
 
     Examples
     --------
@@ -111,17 +122,19 @@ class Stimulus(object):
     _subclasses = {}
 
     _attributes = ['description', 'start_time', 'units']
+    _inputs = []
+
+    # subclasses may override with an instance attribute or property
+    duration = 0
 
     def __init__(self, description="stimulus", start_time=0, units=None, items=None, parent=None):
         self.description = description
         self._start_time = start_time
         self.units = units
-        # Stimulus has a duration of 0 by default, but subclass may already have set this
-        if not hasattr(self, 'duration'):
-            self.duration = 0
-        
+
         self._items = []
-        self._parent = WeakRef(None)  
+        self._parent = WeakRef(None)
+        self._owner = WeakRef(None)
         self.parent = parent
 
         for item in (items or []):
@@ -144,6 +157,8 @@ class Stimulus(object):
         old_parent = self.parent
         if old_parent is new_parent:
             return
+        if new_parent is not None and self.owner is not None:
+            raise ValueError("a stimulus used as an input cannot also be a child item")
         self._parent = WeakRef(new_parent)
         if old_parent is not None:
             try:
@@ -152,6 +167,39 @@ class Stimulus(object):
                 pass  # already removed
         if new_parent is not None and not any(item is self for item in new_parent._items):
             new_parent.append_item(self)
+
+    @property
+    def owner(self):
+        """The stimulus that uses this one as a named input, or None.
+        """
+        return self._owner()
+
+    @property
+    def inputs(self):
+        """Dict of this stimulus's named inputs.
+        """
+        return {name: getattr(self, name) for name in self._inputs}
+
+    def __setattr__(self, name, value):
+        if name in self._inputs:
+            self._attach_input(name, value)
+        object.__setattr__(self, name, value)
+
+    def _attach_input(self, name, stim):
+        if not isinstance(stim, Stimulus):
+            raise TypeError("input %r must be a Stimulus instance" % name)
+        if stim.parent is not None or (stim.owner is not None and stim.owner is not self):
+            raise ValueError("input %r already has a parent or owner" % name)
+        old = self.__dict__.get(name)
+        if old is not None and old is not stim:
+            old._owner = WeakRef(None)
+        stim._owner = WeakRef(self)
+
+    def _eval_input(self, name, trace, index_mode=None):
+        """Evaluate input *name* on a zero-filled copy of *trace*'s timebase; return its data array.
+        """
+        blank = trace.copy(data=np.zeros(len(trace)))
+        return getattr(self, name).eval(trace=blank, index_mode=index_mode).data
 
     @property
     def items(self):
@@ -190,12 +238,13 @@ class Stimulus(object):
     def global_start_time(self):
         """The global starting time of this stimulus.
         
-        This is computed as the sum of all ``start_time``s in the ancestry
-        of this item (including this item itself).
+        This is the sum of ``start_time`` along the chain of parents (or, for an input, its owner).
         """
         t = 0
-        for item in self.ancestry:
+        item = self
+        while item is not None:
             t += item.start_time
+            item = item.parent if item.parent is not None else item.owner
         return t
 
     @property
@@ -318,21 +367,34 @@ class Stimulus(object):
         for i in range(len(self.items)):
             if self.items[i] != other.items[i]:
                 return False
+        for name in self._inputs:
+            if getattr(self, name) != getattr(other, name):
+                return False
         return True
 
     def __ne__(self, other):
         return not (self == other)
 
     def save(self):
-        """Return a serializable representation of this Stimulus and its children.
+        """Return a JSON-serializable representation of this Stimulus, its children, and inputs.
+
+        The root state carries ``schema_version`` (see STIMULUS_SCHEMA_VERSION).
         """
+        state = {'schema_version': STIMULUS_SCHEMA_VERSION}
+        state.update(self._save_state())
+        return state
+
+    def _save_state(self):
+        # unversioned state of this stimulus and its descendants; subclasses override this, not save()
         state = {
             'type': self.type,
             'args': {'start_time': float(self.start_time)},
         }
         for name in self._attributes:
             state['args'][name] = self._save_value(getattr(self, name))
-        state['items'] = [item.save() for item in self.items]
+        state['items'] = [item._save_state() for item in self.items]
+        if self._inputs:
+            state['inputs'] = {name: stim._save_state() for name, stim in self.inputs.items()}
         return state
 
     @classmethod
@@ -350,12 +412,24 @@ class Stimulus(object):
     def load(cls, state):
         """Generate and return a Stimulus instance given a state data structure that was
         previously generated using Stimulus.save().
+
+        States without ``schema_version`` are accepted as legacy; raises ValueError if the
+        version is newer than STIMULUS_SCHEMA_VERSION.
         """
-        item_type = state['type']
-        item_class = cls.get_stimulus_class(item_type)
-        item = item_class(**state.get('args', {}))
+        version = state.get('schema_version', 0)
+        if version > STIMULUS_SCHEMA_VERSION:
+            raise ValueError(
+                "Stimulus state has schema version %s; this version of neuroanalysis supports up to %d."
+                % (version, STIMULUS_SCHEMA_VERSION))
+        return cls._load_state(state)
+
+    @classmethod
+    def _load_state(cls, state):
+        item_class = cls.get_stimulus_class(state['type'])
+        inputs = {name: cls._load_state(s) for name, s in state.get('inputs', {}).items()}
+        item = item_class(**state.get('args', {}), **inputs)
         for item_state in state.get('items', []):
-            item.append_item(cls.load(item_state))
+            item.append_item(cls._load_state(item_state))
         return item
 
     @classmethod
@@ -399,9 +473,9 @@ class LazyLoadStimulus(Stimulus):
                 self.insert_item(i, item)
         return tuple(self._items)
 
-    def save(self):
-        """Save as a plain Stimulus containing the loaded items (the loader is not serializable)."""
-        state = Stimulus.save(self)
+    def _save_state(self):
+        # saved as a plain Stimulus containing the loaded items; the loader is not serializable
+        state = Stimulus._save_state(self)
         state['type'] = 'Stimulus'
         return state
 
@@ -632,8 +706,8 @@ class SquarePulseTrain(Stimulus):
         """
         return [item.start_time for item in self.items]
 
-    def save(self):
-        state = Stimulus.save(self)
+    def _save_state(self):
+        state = Stimulus._save_state(self)
         state['items'] = []  # don't save auto-generated items
         return state
         
@@ -677,8 +751,8 @@ class SquarePulseSeries(Stimulus):
         """
         return [t + self.global_start_time for t in self.pulse_times]
 
-    def save(self):
-        state = Stimulus.save(self)
+    def _save_state(self):
+        state = Stimulus._save_state(self)
         state['items'] = []  # don't save auto-generated items
         return state
         
@@ -987,4 +1061,229 @@ class Psp(Stimulus):
         start = self.global_start_time
         chunk = _region(trace, start, start+self.duration, index_mode=kwds.get('index_mode'))
         chunk.data[:] = True
+        return trace
+
+
+class Noise(Stimulus):
+    """Gaussian noise with a power-law spectrum, over [start_time, start_time + duration].
+
+    Generated by FFT spectral shaping of a seeded normal draw, then normalized so that the
+    samples in the window have exactly the given mean and standard deviation. Assumes uniform
+    sampling. The realization depends on the sample timebase: the same seed at a different
+    sample rate or window length gives different noise.
+
+    Parameters
+    ----------
+    start_time : float
+        Start time (s) relative to the parent.
+    duration : float
+        Duration (s) of the noise.
+    sigma : float
+        Standard deviation of the noise over the window.
+    mean : float
+        Mean of the noise over the window.
+    noise_type : str
+        Power spectrum shape: 'white' (flat), 'pink' (1/f), 'brown' (1/f^2), 'blue' (f), or 'violet' (f^2).
+    seed : int | None
+        Random seed. If None, a seed is chosen at construction and saved with the stimulus.
+    description : str
+        Optional string describing the stimulus.
+    units : str | None
+        Optional string describing the units of values in the stimulus.
+    """
+    _attributes = Stimulus._attributes + ['duration', 'sigma', 'mean', 'noise_type', 'seed']
+
+    # power spectral density exponent for each noise type
+    spectral_exponents = {'white': 0, 'pink': -1, 'brown': -2, 'blue': 1, 'violet': 2}
+
+    def __init__(self, start_time, duration, sigma, mean=0, noise_type='white', seed=None, description="noise", units=None, parent=None):
+        if duration < 0:
+            raise ValueError("duration must be non-negative")
+        if sigma < 0:
+            raise ValueError("sigma must be non-negative")
+        if noise_type not in self.spectral_exponents:
+            raise ValueError("noise_type must be one of %s; got %r" % (list(self.spectral_exponents), noise_type))
+        if seed is None:
+            seed = int(np.random.SeedSequence().entropy % 2**63)
+        self.duration = duration
+        self.sigma = sigma
+        self.mean = mean
+        self.noise_type = noise_type
+        self.seed = seed
+        Stimulus.__init__(self, description=description, start_time=start_time, parent=parent, units=units)
+
+    def eval(self, **kwds):
+        trace = Stimulus.eval(self, **kwds)
+        start = self.global_start_time
+        chunk = _region(trace, start, start + self.duration, index_mode=kwds.get('index_mode'))
+        chunk.data[:] += self.noise_values(len(chunk))
+        return trace
+
+    def noise_values(self, n):
+        """Return *n* samples of this noise (the values eval adds over its window).
+        """
+        if n == 0:
+            return np.zeros(0)
+        x = np.random.default_rng(self.seed).standard_normal(n)
+        exponent = self.spectral_exponents[self.noise_type]
+        if exponent != 0:
+            freqs = np.fft.rfftfreq(n)
+            scale = np.zeros(len(freqs))
+            scale[1:] = freqs[1:] ** (exponent / 2)
+            x = np.fft.irfft(np.fft.rfft(x) * scale, n)
+        x = x - x.mean()
+        std = x.std()
+        if std > 0:
+            x *= self.sigma / std
+        return x + self.mean
+
+    def mask(self, **kwds):
+        trace = Stimulus.mask(self, **kwds)
+        start = self.global_start_time
+        _region(trace, start, start + self.duration, index_mode=kwds.get('index_mode')).data[:] = True
+        return trace
+
+
+class Pwm(Stimulus):
+    """Pulse-width modulation of a square wave by a duty-cycle input.
+
+    Cycles start at start_time + k * period. Each cycle outputs *amplitude* for its first
+    duty * period and 0 for the rest, where duty is the mean of the *duty* input over that cycle,
+    clipped to [0, 1]. The final cycle is truncated at start_time + duration.
+
+    Parameters
+    ----------
+    start_time : float
+        Start time (s) relative to the parent.
+    duration : float
+        Duration (s) of the PWM output.
+    period : float
+        Duration (s) of one PWM cycle.
+    amplitude : float
+        Output value during the "on" part of each cycle.
+    duty : Stimulus
+        Input giving the duty cycle (0-1); its start_time is relative to this stimulus's start.
+    description : str
+        Optional string describing the stimulus.
+    units : str | None
+        Optional string describing the units of values in the stimulus.
+    """
+    _attributes = Stimulus._attributes + ['duration', 'period', 'amplitude']
+    _inputs = ['duty']
+
+    def __init__(self, start_time, duration, period, amplitude, duty, description="pwm", units=None, parent=None):
+        if duration < 0:
+            raise ValueError("duration must be non-negative")
+        if period <= 0:
+            raise ValueError("period must be positive")
+        self.duration = duration
+        self.period = period
+        self.amplitude = amplitude
+        self.duty = duty
+        Stimulus.__init__(self, description=description, start_time=start_time, parent=parent, units=units)
+
+    def eval(self, **kwds):
+        index_mode = kwds.get('index_mode')
+        trace = Stimulus.eval(self, **kwds)
+        duty = self._eval_input('duty', trace, index_mode=index_mode)
+        start = self.global_start_time
+        stop = start + self.duration
+        n_cycles = int(np.ceil(round(self.duration / self.period, 9)))
+        for k in range(n_cycles):
+            cycle_start = start + k * self.period
+            cycle_stop = min(cycle_start + self.period, stop)
+            i0 = _region_index(trace, cycle_start, index_mode=index_mode)
+            i1 = _region_index(trace, cycle_stop, index_mode=index_mode)
+            if i1 <= i0:
+                continue
+            frac = float(np.clip(duty[i0:i1].mean(), 0, 1))
+            on_stop = min(cycle_start + frac * self.period, cycle_stop)
+            _region(trace, cycle_start, on_stop, index_mode=index_mode).data[:] += self.amplitude
+        return trace
+
+    def mask(self, **kwds):
+        trace = Stimulus.mask(self, **kwds)
+        start = self.global_start_time
+        _region(trace, start, start + self.duration, index_mode=kwds.get('index_mode')).data[:] = True
+        return trace
+
+
+class Filter(Stimulus):
+    """A lowpass-filtered copy of an input stimulus.
+
+    The input is evaluated and filtered over the entire evaluated trace, which must be regularly
+    sampled. Bessel and Butterworth filters are causal (like a hardware filter); samples before
+    the trace are taken to equal the first sample. The Gaussian filter is symmetric (zero-phase),
+    with kernel sigma = sqrt(ln 2) / (2 * pi * cutoff) seconds, which puts its
+    -3 dB point at *cutoff*. Filter ringing and tails may extend outside ``mask()``.
+
+    Parameters
+    ----------
+    input : Stimulus
+        The stimulus to filter; its start_time is relative to this stimulus's start.
+    filter_type : str
+        'bessel', 'butterworth', or 'gaussian'.
+    cutoff : float
+        -3 dB frequency (Hz).
+    order : int
+        Filter order for 'bessel' and 'butterworth'; ignored for 'gaussian'.
+    start_time : float
+        Start time (s) relative to the parent; shifts the input.
+    description : str
+        Optional string describing the stimulus.
+    units : str | None
+        Optional string describing the units of values in the stimulus.
+    """
+    _attributes = Stimulus._attributes + ['filter_type', 'cutoff', 'order']
+    _inputs = ['input']
+
+    filter_types = ('bessel', 'butterworth', 'gaussian')
+
+    def __init__(self, input, filter_type, cutoff, order=4, start_time=0, description="filter", units=None, parent=None):
+        if filter_type not in self.filter_types:
+            raise ValueError("filter_type must be one of %s; got %r" % (list(self.filter_types), filter_type))
+        if cutoff <= 0:
+            raise ValueError("cutoff must be positive")
+        if not isinstance(order, (int, np.integer)) or order < 1:
+            raise ValueError("order must be a positive integer")
+        self.filter_type = filter_type
+        self.cutoff = cutoff
+        self.order = order
+        self.input = input
+        Stimulus.__init__(self, description=description, start_time=start_time, parent=parent, units=units)
+
+    @property
+    def duration(self):
+        """Time (s) from this stimulus's start to the end of its input, including the input's children.
+        """
+        return max(0, self.input.total_global_end_time - self.global_start_time)
+
+    def eval(self, **kwds):
+        index_mode = kwds.get('index_mode')
+        trace = Stimulus.eval(self, **kwds)
+        if not trace.regularly_sampled:
+            raise ValueError("Filter requires a regularly sampled trace")
+        x = self._eval_input('input', trace, index_mode=index_mode)
+        trace.data[:] += self.filter_values(x, trace.sample_rate)
+        return trace
+
+    def filter_values(self, x, sample_rate):
+        """Return array *x* filtered by this filter at *sample_rate* (Hz).
+        """
+        if len(x) == 0:
+            return x.copy()
+        if self.filter_type == 'gaussian':
+            sigma = np.sqrt(np.log(2)) / (2 * np.pi * self.cutoff)
+            return scipy.ndimage.gaussian_filter1d(x, sigma * sample_rate, mode='nearest')
+        if self.filter_type == 'bessel':
+            sos = scipy.signal.bessel(self.order, self.cutoff, norm='mag', fs=sample_rate, output='sos')
+        else:
+            sos = scipy.signal.butter(self.order, self.cutoff, fs=sample_rate, output='sos')
+        y, _ = scipy.signal.sosfilt(sos, x, zi=scipy.signal.sosfilt_zi(sos) * x[0])
+        return y
+
+    def mask(self, **kwds):
+        trace = Stimulus.mask(self, **kwds)
+        start = self.global_start_time
+        _region(trace, start, start + self.duration, index_mode=kwds.get('index_mode')).data[:] = True
         return trace
