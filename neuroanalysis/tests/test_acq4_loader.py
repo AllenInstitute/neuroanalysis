@@ -136,18 +136,24 @@ def test_legacy_sequenced_sum():
     assert legacy_stimulus(state, {'Pulse_sum': 0.02}).items[0].amplitude == pytest.approx(1.0)
 
 
-@pytest.mark.parametrize('holding', [None, -0.065])
-def test_legacy_holding_multiclamp(holding):
-    state = multiclamp_state({'Pulse': legacy_pulse(0.01, 0.02, -0.01)}, holding=holding)
-    stim = legacy_stimulus(state, units='V')
-    if holding is None:
+@pytest.mark.parametrize('checked_holding, recorded, expected', [
+    (None, None, None),        # unchecked, nothing recorded
+    (-0.065, None, -0.065),    # checked, nothing recorded: holdingSpin
+    (None, -0.07, -0.07),      # unchecked: recorded holding still applies
+    (-0.065, -0.07, -0.07),    # recorded holding wins over holdingSpin
+    (-0.065, 0.0, None),       # recorded zero holding adds no Offset
+])
+def test_legacy_holding(checked_holding, recorded, expected):
+    state = multiclamp_state({'Pulse': legacy_pulse(0.01, 0.02, -0.01)}, holding=checked_holding)
+    stim = legacy_stimulus(state, units='V', holding=recorded)
+    if expected is None:
         assert [type(i) for i in stim.items] == [stimuli.SquarePulse]
     else:
         offset = stim.items[0]
         assert isinstance(offset, stimuli.Offset)
-        assert offset.amplitude == holding
+        assert offset.amplitude == expected
         assert offset.units == 'V'
-        assert stim.eval(n_pts=100, sample_rate=1000).data[0] == holding
+        assert stim.eval(n_pts=100, sample_rate=1000).data[0] == expected
 
 
 def test_legacy_daq_clamp_state():
@@ -182,17 +188,20 @@ def test_trial_sequence_values():
 
 # -- end-to-end through DataManager on a temporary directory --
 
-def write_clamp_file(dh, name, protocol, mode='VC', holding=-0.065):
+def write_clamp_file(dh, name, protocol, mode='VC', holding=-0.065, daq_holding=None):
     units = ('A', 'V') if mode == 'VC' else ('V', 'A')
+    meta = {'ClampState': {'mode': mode, 'holding': holding}, 'Protocol': protocol}
+    if daq_holding is not None:
+        meta['DAQ'] = {'command': {'holding': daq_holding}, 'primary': {'rate': 10000}}
     info = [
         axis(name='Channel', cols=[('primary', units[0]), ('command', units[1])]),
         axis(name='Time', units='s', values=np.arange(100) * 1e-4),
-        {'ClampState': {'mode': mode, 'holding': holding}, 'Protocol': protocol},
+        meta,
     ]
     return dh.writeFile(MetaArray(np.zeros((2, 100)), info=info), name + '.ma')
 
 
-def make_sequence(tmp_path, dev_state, protocol, seq_params, device='Clamp1'):
+def make_sequence(tmp_path, dev_state, protocol, seq_params, device='Clamp1', daq_holding=None):
     """Write a ProtocolSequence dir with one trial dir per index in seq_params' value lists."""
     root = DataManager.getDirHandle(str(tmp_path))
     seq = root.mkdir('IV_000', info={'dirType': 'ProtocolSequence', 'devices': {device: dev_state},
@@ -201,7 +210,7 @@ def make_sequence(tmp_path, dev_state, protocol, seq_params, device='Clamp1'):
     for i in range(n):
         trial = seq.mkdir('%03d' % i, info={'dirType': 'Protocol', 'startTime': 1e9,
                                             **{(device, k): i for k in seq_params}})
-        write_clamp_file(trial, device, protocol)
+        write_clamp_file(trial, device, protocol, daq_holding=daq_holding)
     return root
 
 
@@ -227,9 +236,10 @@ def test_load_stimulus_recorded_daq_clamp(tmp_path):
 
 
 def test_load_stimulus_legacy_sequence(tmp_path):
-    state = multiclamp_state({'Pulse': legacy_pulse(0.01, 0.02, -0.01, {'amplitude': {'sequence': 'list'}})},
-                             holding=-0.065)
-    root = make_sequence(tmp_path, state, {'mode': 'VC'}, {'Pulse_amplitude': [-0.02, 0.0, 0.02]})
+    # holding unchecked; the recorded DAQ command holding is still applied
+    state = multiclamp_state({'Pulse': legacy_pulse(0.01, 0.02, -0.01, {'amplitude': {'sequence': 'list'}})})
+    root = make_sequence(tmp_path, state, {'mode': 'VC'}, {'Pulse_amplitude': [-0.02, 0.0, 0.02]},
+                         daq_holding=-0.065)
     loader = Acq4DatasetLoader(root['IV_000'].name())
     amps = []
     for i in range(3):
@@ -268,3 +278,17 @@ def test_load_stimulus_generic_recording():
     assert Acq4DatasetLoader('unused').load_stimulus(rec) == stim
     with pytest.raises(NotImplementedError):
         Acq4DatasetLoader('unused').load_stimulus(Recording(channels={}, device_type='Laser', Protocol={}))
+
+
+def test_load_stimulus_legacy_holding_spin_fallback(tmp_path):
+    state = multiclamp_state({'Pulse': legacy_pulse(0.01, 0.02, -0.01)}, holding=-0.06)
+    root = make_sequence(tmp_path, state, {'mode': 'VC'}, {})
+    stim = Acq4DatasetLoader(root.name()).load_stimulus(clamp_recording(root['IV_000']['000']['Clamp1.ma']))
+    assert stim.items[0].amplitude == -0.06
+
+
+def test_load_stimulus_legacy_recorded_holding_wins(tmp_path):
+    state = multiclamp_state({'Pulse': legacy_pulse(0.01, 0.02, -0.01)}, holding=-0.06)
+    root = make_sequence(tmp_path, state, {'mode': 'VC'}, {}, daq_holding=-0.07)
+    stim = Acq4DatasetLoader(root.name()).load_stimulus(clamp_recording(root['IV_000']['000']['Clamp1.ma']))
+    assert stim.items[0].amplitude == -0.07

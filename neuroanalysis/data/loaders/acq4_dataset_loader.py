@@ -166,7 +166,9 @@ class Acq4DatasetLoader(DatasetLoader):
             return None
         seq_values = {} if seq_dir is None else trial_sequence_values(seq_dir.info(), trial_dir.info(), recording.device_id)
         mode = dev_state.get('mode', recording.clamp_mode)
-        return legacy_stimulus(dev_state, seq_values, description=task_dir.shortName()[:-4], units=_clamp_units(mode))
+        holding = info.get('DAQ', {}).get('command', {}).get('holding')
+        return legacy_stimulus(dev_state, seq_values, description=task_dir.shortName()[:-4],
+                               units=_clamp_units(mode), holding=holding)
 
     def load_stimulus_items(self, recording):
         """Return a list of Stimulus instances. 
@@ -221,13 +223,15 @@ def trial_sequence_values(seq_info, trial_info, device):
     return values
 
 
-def legacy_stimulus(dev_state, seq_values=None, description='stimulus', units=None):
+def legacy_stimulus(dev_state, seq_values=None, description='stimulus', units=None, holding=None):
     """Rebuild a Stimulus from a legacy (unversioned) simple-mode stimulus generator state.
 
     *dev_state* is ``info['devices'][<device>]`` of the Protocol or ProtocolSequence dir; the
     generator is read from ``waveGeneratorWidget`` or ``daqState.channels.command.waveGeneratorWidget``.
     *seq_values* maps device sequence names (``'Pulse_length'``, ``'command.Pulse_length'``) to this
     trial's values; sequenced parameters missing from it take their default ``value``.
+    *holding* is the recorded command holding (``.ma`` ``info[-1]['DAQ']['command']['holding']``);
+    it becomes an Offset when nonzero. If None, ``holdingSpin`` is used when ``holdingCheck`` is set.
     Returns None if there is no generator state. Raises NotImplementedError for advanced-mode or
     versioned states and unknown item types.
     """
@@ -245,9 +249,11 @@ def legacy_stimulus(dev_state, seq_values=None, description='stimulus', units=No
     if 'format' in stim_state:
         raise NotImplementedError(f"Stimulus generator state format {stim_state['format']!r} without a saved stimulus.")
 
+    if holding is None and chan_state.get('holdingCheck'):
+        holding = chan_state['holdingSpin']
     items = []
-    if chan_state.get('holdingCheck'):
-        items.append(stimuli.Offset(chan_state['holdingSpin'], description='holding', units=units))
+    if holding:
+        items.append(stimuli.Offset(holding, description='holding', units=units))
     for name, item in stim_state.items():
         items.append(_legacy_item(name, item, prefix, seq_values, units))
     return stimuli.Stimulus(description, items=items, units=units)
