@@ -1,7 +1,65 @@
+import numbers
+
 import numpy as np
 from .util.custom_weakref import WeakRef
 from .data import TSeries
 from .fitting import psp
+
+
+def _region_index(trace, t, index_mode=None):
+    """Index of time *t* in *trace*, as TSeries.index_at, but clipped to [0, len(trace)] instead of
+    [0, len(trace) - 1]: returns len(trace) if *t* falls past the last sample.
+    """
+    n = len(trace)
+    if n == 0:
+        return 0
+    if trace.has_time_values:
+        tv = trace.time_values
+        # past the end if nearer to a virtual sample one interval after the last
+        half_spacing = (tv[-1] - tv[-2]) / 2 if n > 1 else 0
+        if t - tv[-1] > half_spacing:
+            return n
+        return trace.index_at(t)
+    inds = (t - trace.t0) * trace.sample_rate
+    if index_mode is None or index_mode == 'round':
+        inds = np.round(inds)
+    elif index_mode == 'floor':
+        inds = np.floor(inds)
+    elif index_mode == 'ceil':
+        inds = np.ceil(inds)
+    else:
+        raise ValueError("index_mode must be 'round', 'ceil', or 'floor'; got %r" % index_mode)
+    return int(min(max(0, inds), n))
+
+
+def _region(trace, start, stop, index_mode=None):
+    """Return a view of *trace* for times [start, stop).
+
+    A region running past the end of the trace includes the last sample; a region entirely
+    outside the trace is empty.
+    """
+    return trace[_region_index(trace, start, index_mode):_region_index(trace, stop, index_mode)]
+
+
+def _eval_sample_rate(kwds):
+    """Return the lowest sample rate (Hz) implied by Stimulus.eval() arguments, or None if unknown.
+    """
+    trace = kwds.get('trace')
+    time_values = kwds.get('time_values')
+    if trace is not None:
+        if trace.has_time_values:
+            time_values = trace.time_values
+        else:
+            return trace.sample_rate
+    if time_values is not None:
+        if len(time_values) < 2:
+            return None
+        return 1.0 / np.max(np.diff(time_values))
+    if kwds.get('sample_rate') is not None:
+        return kwds['sample_rate']
+    if kwds.get('dt') is not None:
+        return 1.0 / kwds['dt']
+    return None
 
 
 def load_stimulus(state):
@@ -92,7 +150,7 @@ class Stimulus(object):
                 old_parent.remove_item(self)
             except ValueError:
                 pass  # already removed
-        if new_parent is not None and not any(item is self for item in new_parent.items):
+        if new_parent is not None and not any(item is self for item in new_parent._items):
             new_parent.append_item(self)
 
     @property
@@ -317,22 +375,28 @@ class Stimulus(object):
 
 
 class LazyLoadStimulus(Stimulus):
+    """A Stimulus whose child items are loaded on first access via ``loader.load_stimulus_items(source)``.
+
+    Loaded items are placed before any items added before loading. The loader is called once.
+    """
     def __init__(self, description, start_time=0, units=None, items=None, parent=None, loader=None, source=None):
         if loader is None:
             raise Exception("Use of a LazyLoadStimulus requires a loader to be specified upon init.")
         if source is None:
             raise Exception("Use of a LazyLoadStimulus requires a source to be specified upon init.")
 
-        Stimulus.__init__(self, description, start_time=start_time, units=units, items=items, parent=parent)
         self._loader = loader
         self._source = source
+        self._loaded = False
+        Stimulus.__init__(self, description, start_time=start_time, units=units, items=items, parent=parent)
 
     @property
     def items(self):
-        if len(self._items) == 0:
-            items = self._loader.load_stimulus_items(self._source)
-            for item in items:
-                self.append_item(item)
+        if not self._loaded:
+            loaded = self._loader.load_stimulus_items(self._source)
+            self._loaded = True
+            for i, item in enumerate(loaded):
+                self.insert_item(i, item)
         return tuple(self._items)
 
     def save(self):
@@ -366,13 +430,13 @@ class Offset(Stimulus):
 
     def eval(self, **kwds):
         trace = Stimulus.eval(self, **kwds)
-        start_ind = trace.index_at(self.global_start_time, index_mode=kwds.get('index_mode'))
+        start_ind = _region_index(trace, self.global_start_time, index_mode=kwds.get('index_mode'))
         trace.data[start_ind:] += self.amplitude
         return trace
 
     def mask(self, **kwds):
         trace = Stimulus.mask(self, **kwds)
-        start_ind = trace.index_at(self.global_start_time, index_mode=kwds.get('index_mode'))
+        start_ind = _region_index(trace, self.global_start_time, index_mode=kwds.get('index_mode'))
         trace.data[start_ind:] = True
         return trace
         
@@ -406,13 +470,13 @@ class SquarePulse(Stimulus):
     def eval(self, **kwds):
         trace = Stimulus.eval(self, **kwds)
         start = self.global_start_time
-        trace.time_slice(start, start+self.duration, index_mode=kwds.get('index_mode')).data[:] += self.amplitude
+        _region(trace, start, start+self.duration, index_mode=kwds.get('index_mode')).data[:] += self.amplitude
         return trace
 
     def mask(self, **kwds):
         trace = Stimulus.mask(self, **kwds)
         start = self.global_start_time
-        trace.time_slice(start, start+self.duration, index_mode=kwds.get('index_mode')).data[:] = True
+        _region(trace, start, start+self.duration, index_mode=kwds.get('index_mode')).data[:] = True
         return trace
 
 
@@ -538,8 +602,9 @@ class SquarePulseTrain(Stimulus):
     _attributes = Stimulus._attributes + ['n_pulses', 'pulse_duration', 'amplitude', 'interval']
 
     def __init__(self, start_time, n_pulses, pulse_duration, amplitude, interval, description="square pulse train", units=None, parent=None):
-        if not isinstance(n_pulses, int):
+        if not isinstance(n_pulses, numbers.Integral):
             raise TypeError("n_pulses must be an integer")
+        n_pulses = int(n_pulses)
         if n_pulses < 1:
             raise ValueError("n_pulses must be a positive integer")
         if interval < pulse_duration:
@@ -650,14 +715,14 @@ class Ramp(Stimulus):
     def eval(self, **kwds):
         trace = Stimulus.eval(self, **kwds)
         start = self.global_start_time
-        region = trace.time_slice(start, start + self.duration, index_mode=kwds.get('index_mode'))
+        region = _region(trace, start, start + self.duration, index_mode=kwds.get('index_mode'))
         region.data[:] += (region.time_values - start) * self.slope + self.offset
         return trace
 
     def mask(self, **kwds):
         trace = Stimulus.mask(self, **kwds)
         start = self.global_start_time
-        region = trace.time_slice(start, start + self.duration, index_mode=kwds.get('index_mode'))
+        region = _region(trace, start, start + self.duration, index_mode=kwds.get('index_mode'))
         region.data[:] = True
         return trace
 
@@ -700,12 +765,12 @@ class Sine(Stimulus):
         Stimulus.__init__(self, description=description, start_time=start_time, parent=parent, units=units)
 
     def eval(self, **kwds):
-        if kwds.get("sample_rate") is not None:
-            if self.frequency > kwds["sample_rate"] / 2:
-                raise ValueError("Sample rate must be at least twice the frequency of the sine wave.")
+        sample_rate = _eval_sample_rate(kwds)
+        if sample_rate is not None and self.frequency > sample_rate / 2:
+            raise ValueError("Sample rate must be at least twice the frequency of the sine wave.")
         trace = Stimulus.eval(self, **kwds)
         start = self.global_start_time
-        chunk = trace.time_slice(start, start+self.duration, index_mode=kwds.get('index_mode'))
+        chunk = _region(trace, start, start+self.duration, index_mode=kwds.get('index_mode'))
         chunk.data[:] += self.offset
 
         t = chunk.time_values - start
@@ -723,7 +788,7 @@ class Sine(Stimulus):
     def mask(self, **kwds):
         trace = Stimulus.mask(self, **kwds)
         start = self.global_start_time
-        chunk = trace.time_slice(start, start+self.duration, index_mode=kwds.get('index_mode'))
+        chunk = _region(trace, start, start+self.duration, index_mode=kwds.get('index_mode'))
         chunk.data[:] = True
         return trace
 
@@ -810,12 +875,12 @@ class Chirp(Stimulus):
         Stimulus.__init__(self, description=description, start_time=start_time, parent=parent, units=units)
 
     def eval(self, **kwds):
-        if kwds.get("sample_rate") is not None:
-            if self.start_frequency > kwds["sample_rate"] / 2 or self.end_frequency > kwds["sample_rate"] / 2:
-                raise ValueError("Sample rate must be at least twice the maximum frequency in the chirp.")
+        sample_rate = _eval_sample_rate(kwds)
+        if sample_rate is not None and max(self.start_frequency, self.end_frequency) > sample_rate / 2:
+            raise ValueError("Sample rate must be at least twice the maximum frequency in the chirp.")
         trace = Stimulus.eval(self, **kwds)
         start = self.global_start_time
-        chunk = trace.time_slice(start, start + self.duration, index_mode=kwds.get('index_mode'))
+        chunk = _region(trace, start, start + self.duration, index_mode=kwds.get('index_mode'))
         chunk.data[:] += self.offset
 
         t = chunk.time_values - start
@@ -827,7 +892,7 @@ class Chirp(Stimulus):
     def _kr(self):
         # return constants k and r (see mathy notes above)
         f0, f1 = self.start_frequency, self.end_frequency
-        r = 0 if f0 == 0 else f1 / f0
+        r = f1 / f0
         k = 2 * np.pi * self.duration * f0 / np.log(r)        
         return k, r
 
@@ -855,7 +920,7 @@ class Chirp(Stimulus):
     def mask(self, **kwds):
         trace = Stimulus.mask(self, **kwds)
         start = self.global_start_time
-        chunk = trace.time_slice(start, start+self.duration, index_mode=kwds.get('index_mode'))
+        chunk = _region(trace, start, start+self.duration, index_mode=kwds.get('index_mode'))
         chunk.data[:] = True
         return trace
 
@@ -905,7 +970,7 @@ class Psp(Stimulus):
     def eval(self, **kwds):
         trace = Stimulus.eval(self, **kwds)
         start = self.global_start_time
-        chunk = trace.time_slice(start, start + self.duration, index_mode=kwds.get('index_mode'))
+        chunk = _region(trace, start, start + self.duration, index_mode=kwds.get('index_mode'))
         chunk.data[:] += psp.Psp.psp_func(
             x=chunk.time_values,
             xoffset=start,
@@ -920,6 +985,6 @@ class Psp(Stimulus):
     def mask(self, **kwds):
         trace = Stimulus.mask(self, **kwds)
         start = self.global_start_time
-        chunk = trace.time_slice(start, start+self.duration, index_mode=kwds.get('index_mode'))
+        chunk = _region(trace, start, start+self.duration, index_mode=kwds.get('index_mode'))
         chunk.data[:] = True
         return trace
