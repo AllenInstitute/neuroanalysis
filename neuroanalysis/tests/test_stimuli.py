@@ -1,3 +1,4 @@
+import json
 from collections import OrderedDict
 
 import numpy as np
@@ -236,8 +237,8 @@ def test_ramp():
     stim = stimuli.Ramp(start_time=1.0, slope=2.3, duration=1.5, offset=0.5)
     t = stim.eval(t0=0, n_pts=1000, dt=0.01)
     test_data = np.zeros(1000)
-    test_data[100:250] = 0.5 + np.arange(150) * 2.3
-    assert np.all(t.data == test_data)
+    test_data[100:250] = 0.5 + np.arange(150) * 0.01 * 2.3
+    assert np.allclose(t.data, test_data)
     assert np.all(stim.mask(time_values=t.time_values).data == (t.data != 0))
 
 
@@ -411,13 +412,565 @@ def test_find_noisy_square_pulses():
     assert pulses[1].duration == 0.1
 
 
+# --- helpers for the tests below ---
+
+DT = 0.001
+N_PTS = 2000
 
 
+def _eval(stim, dt=DT, n_pts=N_PTS):
+    return stim.eval(t0=0, n_pts=n_pts, dt=dt).data
 
 
+def _check_round_trip(stim):
+    """Check that save/load (direct and via JSON) preserves equality and eval output; return the loaded copy."""
+    state = stim.save()
+    json_state = json.loads(json.dumps(state))
+    assert json_state == state
+    expected = _eval(stim)
+    for st in (state, json_state):
+        loaded = stimuli.Stimulus.load(st)
+        assert type(loaded) is type(stim)
+        assert loaded == stim
+        assert loaded.parent is None
+        assert loaded.save() == state
+        assert np.array_equal(_eval(loaded), expected)
+    return loaded
 
 
+class FakeLoader:
+    """Minimal loader for LazyLoadStimulus; records each source it is asked to load."""
+    def __init__(self, items_by_source):
+        self.items_by_source = items_by_source
+        self.calls = []
+
+    def load_stimulus_items(self, source):
+        self.calls.append(source)
+        return self.items_by_source[source]
 
 
+class CustomPulse(stimuli.SquarePulse):
+    pass
 
 
+class CustomPulseVariant(CustomPulse):
+    pass
+
+
+# --- per-class parameter, eval, and save/load tests ---
+
+def test_stimulus_params():
+    child = stimuli.SquarePulse(start_time=0.1, duration=0.05, amplitude=2.0)
+    s = stimuli.Stimulus(description="base", start_time=0.25, units='V', items=[child])
+    assert s.description == "base"
+    assert s.start_time == 0.25
+    assert s.global_start_time == 0.25
+    assert s.units == 'V'
+    assert s.duration == 0
+    assert s.items == (child,)
+    assert child.parent is s
+    assert child.global_start_time == 0.35
+
+    result = s.eval(t0=0, n_pts=N_PTS, dt=DT)
+    assert result.units == 'V'
+    expected = np.zeros(N_PTS)
+    expected[350:400] = 2.0
+    assert np.array_equal(result.data, expected)
+
+    parent = stimuli.Stimulus(description="outer")
+    s2 = stimuli.Stimulus(description="inner", parent=parent)
+    assert s2.parent is parent
+    assert parent.items == (s2,)
+
+    assert np.array_equal(stimuli.Stimulus(units='A').eval(t0=0, n_pts=10, dt=DT).data, np.zeros(10))
+    _check_round_trip(s)
+
+
+def test_offset_params():
+    stim = stimuli.Offset(amplitude=-1.5, start_time=0.3, description="holding", units='A')
+    assert stim.description == "holding"
+    assert stim.units == 'A'
+    result = stim.eval(t0=0, n_pts=N_PTS, dt=DT)
+    assert result.units == 'A'
+    expected = np.zeros(N_PTS)
+    expected[300:] = -1.5
+    assert np.array_equal(result.data, expected)
+
+    parent = stimuli.Stimulus(start_time=0.2, items=[stim])
+    expected = np.zeros(N_PTS)
+    expected[500:] = -1.5
+    assert np.array_equal(_eval(parent), expected)
+    assert np.array_equal(stim.mask(t0=0, n_pts=N_PTS, dt=DT).data, expected != 0)
+
+    loaded = _check_round_trip(stimuli.Offset(amplitude=-1.5, start_time=0.3, description="holding", units='A'))
+    assert loaded.amplitude == -1.5
+
+
+def test_square_pulse_params():
+    stim = stimuli.SquarePulse(start_time=0.05, duration=0.1, amplitude=2e-10, description="test pulse", units='A')
+    result = stim.eval(t0=0, n_pts=N_PTS, dt=DT)
+    assert result.units == 'A'
+    expected = np.zeros(N_PTS)
+    expected[50:150] = 2e-10
+    assert np.array_equal(result.data, expected)
+    loaded = _check_round_trip(stim)
+    assert (loaded.description, loaded.units, loaded.duration, loaded.amplitude) == ("test pulse", 'A', 0.1, 2e-10)
+
+    # zero-duration pulse is allowed and affects no samples
+    assert np.array_equal(_eval(stimuli.SquarePulse(start_time=0.05, duration=0, amplitude=1)), np.zeros(N_PTS))
+
+
+def test_square_pulse_train_params():
+    stim = stimuli.SquarePulseTrain(
+        start_time=0.1, n_pulses=4, pulse_duration=0.005, amplitude=-3.0, interval=0.02,
+        description="train", units='V',
+    )
+    assert len(stim.items) == 4
+    assert np.allclose(stim.pulse_times, [0, 0.02, 0.04, 0.06])
+    assert np.allclose(stim.global_pulse_times, [0.1, 0.12, 0.14, 0.16])
+    for i, pulse in enumerate(stim.items):
+        assert pulse.pulse_number == i
+        assert pulse.units == 'V'
+        assert pulse.amplitude == -3.0
+        assert pulse.duration == 0.005
+
+    expected = np.zeros(N_PTS)
+    for start in (100, 120, 140, 160):
+        expected[start:start + 5] = -3.0
+    assert np.array_equal(_eval(stim), expected)
+
+    assert stim.save()['items'] == []
+    loaded = _check_round_trip(stim)
+    assert len(loaded.items) == 4
+    assert (loaded.description, loaded.units, loaded.n_pulses, loaded.interval) == ("train", 'V', 4, 0.02)
+
+
+def test_square_pulse_series_params():
+    stim = stimuli.SquarePulseSeries(
+        start_time=0.2, pulse_times=[0, 0.05, 0.12], pulse_durations=[0.01, 0.02, 0.005],
+        amplitudes=[1.0, -2.0, 0.5], description="series", units='A',
+    )
+    assert len(stim.items) == 3
+    assert np.allclose(stim.global_pulse_times, [0.2, 0.25, 0.32])
+    expected = np.zeros(N_PTS)
+    expected[200:210] = 1.0
+    expected[250:270] = -2.0
+    expected[320:325] = 0.5
+    assert np.array_equal(_eval(stim), expected)
+    assert stim.save()['items'] == []
+    loaded = _check_round_trip(stim)
+    assert loaded.description == "series"
+    assert len(loaded.items) == 3
+
+    default = stimuli.SquarePulseSeries(start_time=0, pulse_times=[0], pulse_durations=[0.01], amplitudes=[1])
+    assert default.description == "square pulse series"
+
+    # numpy array / scalar inputs must save as JSON-compatible values and compare equal after load
+    np_stim = stimuli.SquarePulseSeries(
+        start_time=np.float64(0.2), pulse_times=np.array([0, 0.05, 0.12]),
+        pulse_durations=np.array([0.01, 0.02, 0.005]), amplitudes=np.array([1.0, -2.0, 0.5], dtype=np.float32),
+    )
+    assert np_stim == stimuli.SquarePulseSeries(
+        start_time=0.2, pulse_times=[0, 0.05, 0.12], pulse_durations=[0.01, 0.02, 0.005],
+        amplitudes=[1.0, -2.0, 0.5],
+    )
+    _check_round_trip(np_stim)
+
+
+def test_ramp_params():
+    stim = stimuli.Ramp(start_time=0.1, duration=0.5, slope=4.0, offset=-1.0, description="ramp", units='V')
+    result = stim.eval(t0=0, n_pts=N_PTS, dt=DT)
+    assert result.units == 'V'
+    expected = np.zeros(N_PTS)
+    expected[100:600] = -1.0 + 4.0 * np.arange(500) * DT
+    assert np.allclose(result.data, expected, rtol=0, atol=1e-12)
+    assert result.data[99] == 0
+    assert result.data[600] == 0
+
+    # slope is per second, so the value at a given time is independent of sample rate
+    for dt in (1e-3, 1e-4, 2e-5):
+        trace = stim.eval(t0=0, n_pts=int(round(1.0 / dt)), dt=dt)
+        assert np.isclose(trace.value_at(0.35, interp='nearest'), 0.0, atol=4.0 * dt)
+        assert np.isclose(trace.value_at(0.6 - dt, interp='nearest'), -1.0 + 4.0 * (0.5 - dt), atol=1e-9)
+
+    state = stim.save()
+    assert state['args']['offset'] == -1.0
+    assert state['args']['slope'] == 4.0
+    loaded = _check_round_trip(stim)
+    assert loaded.offset == -1.0
+
+
+def test_sine_params():
+    stim = stimuli.Sine(
+        start_time=0.1, duration=0.5, frequency=10.0, amplitude=2.0, phase=np.pi / 2, offset=0.5,
+        description="sine", units='A',
+    )
+    result = stim.eval(t0=0, n_pts=N_PTS, dt=DT)
+    assert result.units == 'A'
+    t = np.arange(500) * DT
+    expected = np.zeros(N_PTS)
+    expected[100:600] = 0.5 + 2.0 * np.cos(2 * np.pi * 10.0 * t)
+    assert np.allclose(result.data, expected, rtol=0, atol=1e-12)
+    assert np.isclose(result.data[100], 2.5)   # phase pi/2 -> peak at start
+    assert np.isclose(result.data[125], 0.5)   # quarter period later -> zero crossing
+    assert np.isclose(result.data[150], -1.5)  # half period later -> trough
+    assert result.data[99] == 0
+    assert result.data[600] == 0
+
+    assert stim.save()['args']['offset'] == 0.5
+    loaded = _check_round_trip(stim)
+    assert loaded.offset == 0.5
+    assert loaded.phase == np.pi / 2
+
+
+def test_chirp_params():
+    f0, f1, dur, amp, ph, off = 5.0, 40.0, 1.0, 1.5, 0.3, -0.2
+    stim = stimuli.Chirp(
+        start_time=0.1, duration=dur, start_frequency=f0, end_frequency=f1, amplitude=amp,
+        phase=ph, offset=off, description="chirp", units='V',
+    )
+    result = stim.eval(t0=0, n_pts=N_PTS, dt=DT)
+    assert result.units == 'V'
+    # phase = ph + integral of 2*pi*f(t) with f(t) = f0 * (f1/f0)**(t/dur)
+    t = np.arange(1000) * DT
+    r = f1 / f0
+    phase = ph + 2 * np.pi * f0 * dur * (r ** (t / dur) - 1) / np.log(r)
+    expected = np.zeros(N_PTS)
+    expected[100:1100] = off + amp * np.sin(phase)
+    assert np.allclose(result.data, expected, rtol=0, atol=1e-9)
+    assert result.data[99] == 0
+    assert result.data[1100] == 0
+    assert np.isclose(result.data[100], off + amp * np.sin(ph))
+
+    assert np.isclose(stim.frequency_at(0), f0)
+    assert np.isclose(stim.frequency_at(dur), f1)
+    assert np.isclose(stim.frequency_at(dur / 2), np.sqrt(f0 * f1))
+    # frequency_at agrees with the numerical derivative of phase_at
+    tt = np.linspace(0.01, 0.99, 20)
+    h = 1e-6
+    numeric_freq = (stim.phase_at(tt + h) - stim.phase_at(tt - h)) / (2 * h) / (2 * np.pi)
+    assert np.allclose(numeric_freq, stim.frequency_at(tt), rtol=1e-5)
+
+    loaded = _check_round_trip(stim)
+    assert (loaded.phase, loaded.offset, loaded.start_frequency, loaded.end_frequency) == (ph, off, f0, f1)
+
+
+def test_chirp_constant_frequency():
+    chirp = stimuli.Chirp(start_time=0.1, duration=0.5, start_frequency=8.0, end_frequency=8.0, amplitude=1.2, phase=0.4, offset=0.1)
+    sine = stimuli.Sine(start_time=0.1, duration=0.5, frequency=8.0, amplitude=1.2, phase=0.4, offset=0.1)
+    data = _eval(chirp)
+    assert np.all(np.isfinite(data))
+    assert np.allclose(data, _eval(sine), rtol=0, atol=1e-12)
+    assert np.isclose(chirp.frequency_at(0.25), 8.0)
+    assert np.allclose(chirp.frequency_at(np.array([0, 0.5])), [8.0, 8.0])
+
+
+def test_psp_params():
+    dt = 1e-4
+    n_pts = 5000
+    rise_time, decay_tau, amp = 0.004, 0.02, -3e-3
+    stim = stimuli.Psp(start_time=0.05, rise_time=rise_time, decay_tau=decay_tau, amplitude=amp, rise_power=3, description="epsc", units='A')
+    assert stim.duration == 15 * decay_tau
+    result = stim.eval(t0=0, n_pts=n_pts, dt=dt)
+    assert result.units == 'A'
+    data = result.data
+    start_ind = 500
+    peak_ind = start_ind + int(round(rise_time / dt))
+    end_ind = start_ind + int(round(stim.duration / dt))
+
+    # zero before onset and after the stimulus duration
+    assert np.all(data[:start_ind + 1] == 0)
+    assert np.all(data[end_ind:] == 0)
+    assert data[end_ind - 1] != 0
+
+    # peak of the given amplitude at rise_time after onset
+    assert np.argmin(data) == peak_ind
+    assert np.isclose(data[peak_ind], amp, rtol=1e-6)
+
+    # late decay follows exp(-t / decay_tau)
+    i1 = start_ind + int(round(0.1 / dt))
+    i2 = start_ind + int(round(0.15 / dt))
+    assert np.isclose(data[i2] / data[i1], np.exp(-0.05 / decay_tau), rtol=1e-6)
+
+    assert stimuli.Psp(start_time=0, rise_time=0.001, decay_tau=0.01, amplitude=1).description == "PSP"
+    loaded = _check_round_trip(stim)
+    assert (loaded.rise_time, loaded.decay_tau, loaded.amplitude, loaded.rise_power) == (rise_time, decay_tau, amp, 3)
+
+
+def test_lazy_load_stimulus():
+    loader = FakeLoader({
+        'rec1': [
+            stimuli.SquarePulse(start_time=0.1, duration=0.05, amplitude=2.0, units='A'),
+            stimuli.Offset(amplitude=0.5, start_time=0.3, units='A'),
+        ],
+    })
+    stim = stimuli.LazyLoadStimulus(description="lazy", start_time=0.2, units='A', loader=loader, source='rec1')
+    assert loader.calls == []
+    assert stim.description == "lazy"
+    assert stim.global_start_time == 0.2
+
+    items = stim.items
+    assert loader.calls == ['rec1']
+    assert len(items) == 2
+    assert all(item.parent is stim for item in items)
+    stim.items
+    assert loader.calls == ['rec1']
+
+    result = stim.eval(t0=0, n_pts=N_PTS, dt=DT)
+    assert result.units == 'A'
+    expected = np.zeros(N_PTS)
+    expected[300:350] = 2.0
+    expected[500:] += 0.5
+    assert np.array_equal(result.data, expected)
+
+    # loader is not serializable; saved state is a plain Stimulus holding the loaded items
+    state = stim.save()
+    json_state = json.loads(json.dumps(state))
+    assert json_state == state
+    assert state['type'] == 'Stimulus'
+    for st in (state, json_state):
+        loaded = stimuli.Stimulus.load(st)
+        assert type(loaded) is stimuli.Stimulus
+        assert loaded.items == stim.items
+        assert (loaded.description, loaded.start_time, loaded.units) == ("lazy", 0.2, 'A')
+        assert np.array_equal(_eval(loaded), expected)
+
+    with pytest.raises(Exception):
+        stimuli.LazyLoadStimulus(description="no loader", source='rec1')
+    with pytest.raises(Exception):
+        stimuli.LazyLoadStimulus(description="no source", loader=loader)
+
+
+# --- hierarchy, loading, and equality tests ---
+
+def _build_hierarchy():
+    root = stimuli.Stimulus(description="root", start_time=0.05, units='A')
+    stimuli.SquarePulse(start_time=0.01, duration=0.02, amplitude=-1.0, parent=root, units='A')
+    stimuli.SquarePulseTrain(start_time=0.1, n_pulses=3, pulse_duration=0.004, amplitude=2.0, interval=0.01, parent=root, units='A')
+    stimuli.Ramp(start_time=0.2, duration=0.1, slope=10.0, offset=0.25, parent=root, units='A')
+    stimuli.Sine(start_time=0.35, duration=0.1, frequency=20.0, amplitude=0.3, phase=1.0, offset=0.1, parent=root, units='A')
+    stimuli.Chirp(start_time=0.5, duration=0.3, start_frequency=5.0, end_frequency=50.0, amplitude=0.4, phase=0.2, offset=-0.1, parent=root, units='A')
+    stimuli.Psp(start_time=0.85, rise_time=0.003, decay_tau=0.01, amplitude=0.7, rise_power=2.5, parent=root, units='A')
+    stimuli.Offset(amplitude=0.05, start_time=1.5, parent=root, units='A')
+    nested = stimuli.Stimulus(description="nested", start_time=1.1, parent=root, units='A')
+    stimuli.SquarePulseSeries(start_time=0.02, pulse_times=[0, 0.03], pulse_durations=[0.01, 0.015], amplitudes=[0.6, -0.6], parent=nested, units='A')
+    stimuli.SquarePulse(start_time=0.1, duration=0.05, amplitude=3.0, parent=nested, units='A')
+    return root
+
+
+def test_nested_hierarchy():
+    root = _build_hierarchy()
+    nested = root.items[-1]
+    assert len(root.items) == 8
+    assert nested.items[1].global_start_time == pytest.approx(0.05 + 1.1 + 0.1)
+
+    data = _eval(root)
+    assert np.allclose(data, sum(_eval(item) for item in root.items))
+    # nested pulse at global 1.25 s (index 1250) for 0.05 s, with nothing else active
+    assert np.all(data[1250:1300] == 3.0)
+    # first square pulse at global 0.06 s for 0.02 s
+    assert np.all(data[60:80] == -1.0)
+
+    loaded = _check_round_trip(root)
+    assert loaded.items[-1].items[1].global_start_time == pytest.approx(1.25)
+    assert loaded.items[-1].items[0].items[1].global_start_time == pytest.approx(1.2)
+
+    # a differing grandchild makes the hierarchies unequal
+    other = _build_hierarchy()
+    other.items[-1].items[1].amplitude = 3.5
+    assert other != root
+
+
+def test_hierarchy_durations():
+    parent = stimuli.Stimulus(start_time=1.0)
+    stimuli.SquarePulse(start_time=0.5, duration=0.25, parent=parent, amplitude=1)
+    assert parent.global_end_time == 1.0
+    assert parent.total_global_end_time == 1.75
+    assert parent.total_duration == 0.75
+
+
+def test_load_sub_subclass():
+    stim = CustomPulseVariant(start_time=0.1, duration=0.2, amplitude=1.5, units='A')
+    loaded = _check_round_trip(stim)
+    assert type(loaded) is CustomPulseVariant
+    assert type(stimuli.SquarePulse.load(stim.save())) is CustomPulseVariant
+    assert stimuli.Stimulus.get_stimulus_class('CustomPulse') is CustomPulse
+
+    # loading through a subclass still resolves classes outside that subclass's tree
+    parent = stimuli.Stimulus(items=[stimuli.Ramp(start_time=0, duration=0.1, slope=1)])
+    reloaded = CustomPulse.load(parent.save())
+    assert type(reloaded) is stimuli.Stimulus
+    assert reloaded == parent
+
+    # a class defined after the registry was populated is still found
+    stimuli.Stimulus.get_stimulus_class('Stimulus')
+
+    class LateDefinedPulse(CustomPulseVariant):
+        pass
+
+    late = LateDefinedPulse(start_time=0, duration=0.1, amplitude=1)
+    assert type(stimuli.Stimulus.load(late.save())) is LateDefinedPulse
+
+    with pytest.raises(KeyError):
+        stimuli.Stimulus.get_stimulus_class('NoSuchStimulus')
+
+
+def test_load_items_on_non_container_class():
+    pulse = stimuli.SquarePulse(start_time=0.1, duration=0.2, amplitude=1.0)
+    stimuli.Offset(amplitude=0.5, start_time=0.1, parent=pulse)
+    loaded = _check_round_trip(pulse)
+    assert len(loaded.items) == 1
+    assert loaded.items[0].parent is loaded
+
+
+def test_equality():
+    a = stimuli.SquarePulse(start_time=0.1, duration=0.2, amplitude=1.0)
+    b = stimuli.SquarePulse(start_time=0.1, duration=0.2, amplitude=1.0)
+    assert a == b
+    assert not (a != b)
+    assert a != stimuli.SquarePulse(start_time=0.1, duration=0.2, amplitude=2.0)
+    assert a != stimuli.Ramp(start_time=0.1, duration=0.2, slope=1.0)
+    assert a != None
+    assert a != 1
+    assert not (a == "square pulse")
+
+    b.append_item(stimuli.Offset(amplitude=1, start_time=0))
+    assert a != b
+
+
+def test_identical_siblings():
+    parent = stimuli.Stimulus()
+    a = stimuli.SquarePulse(start_time=0.1, duration=0.2, amplitude=1.0, parent=parent)
+    b = stimuli.SquarePulse(start_time=0.1, duration=0.2, amplitude=1.0, parent=parent)
+    assert a == b
+    assert len(parent.items) == 2
+    assert parent.items[0] is a and parent.items[1] is b
+
+    parent.remove_item(b)
+    assert len(parent.items) == 1
+    assert parent.items[0] is a
+    assert b.parent is None and a.parent is parent
+
+    b.parent = parent
+    a.parent = None
+    assert len(parent.items) == 1
+    assert parent.items[0] is b
+
+    with pytest.raises(ValueError):
+        parent.remove_item(a)
+
+
+def test_save_numpy_types():
+    stim = stimuli.SquarePulse(start_time=np.float64(0.1), duration=np.float32(0.25), amplitude=np.int64(3), units=np.str_('A'))
+    args = stim.save()['args']
+    assert type(args['start_time']) is float
+    assert type(args['duration']) is float
+    assert type(args['amplitude']) is int
+    assert type(args['units']) is str
+    _check_round_trip(stim)
+
+
+def test_trace_end_handling():
+    # region overlapping the end of the trace covers through the last sample
+    pulse = stimuli.SquarePulse(start_time=1.5, duration=1.0, amplitude=1.0)
+    expected = np.zeros(N_PTS)
+    expected[1500:] = 1.0
+    assert np.array_equal(_eval(pulse), expected)
+    assert np.array_equal(pulse.mask(t0=0, n_pts=N_PTS, dt=DT).data.astype(bool), expected != 0)
+    sine = stimuli.Sine(start_time=1.9, duration=1.0, frequency=1.0, amplitude=1.0, offset=2.0)
+    assert np.all(_eval(sine)[1900:] > 1.0)
+
+    # regions entirely after the end affect nothing
+    for stim in (
+        stimuli.SquarePulse(start_time=2.5, duration=0.1, amplitude=1.0),
+        stimuli.Offset(amplitude=1.0, start_time=2.5),
+        stimuli.Offset(amplitude=1.0, start_time=N_PTS * DT),
+        stimuli.Ramp(start_time=2.1, duration=0.5, slope=1.0, offset=1.0),
+    ):
+        assert np.array_equal(_eval(stim), np.zeros(N_PTS))
+        assert not np.any(stim.mask(t0=0, n_pts=N_PTS, dt=DT).data)
+
+    # offset starting at the last sample sets only that sample
+    expected = np.zeros(N_PTS)
+    expected[-1] = 1.0
+    assert np.array_equal(_eval(stimuli.Offset(amplitude=1.0, start_time=(N_PTS - 1) * DT)), expected)
+
+    # region entirely before the trace start affects nothing
+    early = stimuli.SquarePulse(start_time=0.2, duration=0.2, amplitude=1.0)
+    assert np.array_equal(early.eval(t0=1.0, n_pts=100, dt=DT).data, np.zeros(100))
+
+    # same behavior with explicit time values
+    tv = np.arange(N_PTS) * DT
+    expected = np.zeros(N_PTS)
+    expected[1500:] = 1.0
+    assert np.array_equal(pulse.eval(time_values=tv).data, expected)
+    assert np.array_equal(stimuli.Offset(amplitude=1.0, start_time=2.5).eval(time_values=tv).data, np.zeros(N_PTS))
+    expected = np.zeros(N_PTS)
+    expected[-1] = 1.0
+    assert np.array_equal(stimuli.Offset(amplitude=1.0, start_time=(N_PTS - 1) * DT).eval(time_values=tv).data, expected)
+
+
+def test_nyquist_any_timebase():
+    sine = stimuli.Sine(start_time=0, duration=0.1, frequency=100, amplitude=1)
+    chirp = stimuli.Chirp(start_time=0, duration=0.1, start_frequency=10, end_frequency=100, amplitude=1)
+    for stim in (sine, chirp):
+        with pytest.raises(ValueError):
+            stim.eval(n_pts=100, dt=1 / 150)
+        with pytest.raises(ValueError):
+            stim.eval(time_values=np.arange(100) / 150)
+        with pytest.raises(ValueError):
+            stim.eval(trace=TSeries(np.zeros(100), dt=1 / 150))
+        with pytest.raises(ValueError):
+            stim.eval(trace=TSeries(np.zeros(100), time_values=np.arange(100) / 150))
+        stim.eval(n_pts=100, dt=1 / 300)
+        stim.eval(time_values=np.arange(100) / 300)
+        stim.eval(trace=TSeries(np.zeros(100), dt=1 / 300))
+
+    # checked when evaluated as a child, too
+    parent = stimuli.Stimulus(items=[stimuli.Sine(start_time=0, duration=0.1, frequency=100, amplitude=1)])
+    with pytest.raises(ValueError):
+        parent.eval(n_pts=100, dt=1 / 150)
+
+    # irregular sampling is checked against its largest interval
+    with pytest.raises(ValueError):
+        sine.eval(time_values=np.array([0, 0.001, 0.002, 0.0087]))
+
+
+def test_pulse_train_numpy_n_pulses():
+    stim = stimuli.SquarePulseTrain(start_time=0.1, n_pulses=np.int64(3), pulse_duration=0.01, amplitude=1.0, interval=0.05)
+    assert type(stim.n_pulses) is int
+    assert len(stim.items) == 3
+    assert type(stim.save()['args']['n_pulses']) is int
+    _check_round_trip(stim)
+    with pytest.raises(TypeError):
+        stimuli.SquarePulseTrain(start_time=0, n_pulses=np.float64(3), pulse_duration=0.01, amplitude=1, interval=0.1)
+
+
+def test_lazy_load_once():
+    # a loader returning no items is called only once
+    empty = FakeLoader({'empty': []})
+    stim = stimuli.LazyLoadStimulus(description="empty", loader=empty, source='empty')
+    assert stim.items == ()
+    assert stim.items == ()
+    stim.eval(t0=0, n_pts=10, dt=DT)
+    assert empty.calls == ['empty']
+
+    # items added before the first load do not prevent loading; loaded items come first
+    loaded_pulse = stimuli.SquarePulse(start_time=0.1, duration=0.05, amplitude=2.0)
+    loader = FakeLoader({'rec': [loaded_pulse]})
+    stim = stimuli.LazyLoadStimulus(description="lazy", loader=loader, source='rec')
+    extra = stimuli.Offset(amplitude=0.5, start_time=0.3)
+    stim.append_item(extra)
+    assert loader.calls == []
+    assert stim.items == (loaded_pulse, extra)
+    assert stim.items[0] is loaded_pulse and stim.items[1] is extra
+    assert loaded_pulse.parent is stim and extra.parent is stim
+    stim.items
+    assert loader.calls == ['rec']
+
+    # items passed to the constructor do not trigger loading
+    loader = FakeLoader({'rec': [stimuli.SquarePulse(start_time=0.1, duration=0.05, amplitude=2.0)]})
+    stim = stimuli.LazyLoadStimulus(description="lazy", loader=loader, source='rec', items=[stimuli.Offset(amplitude=1, start_time=0)])
+    assert loader.calls == []
+    assert len(stim.items) == 2
+    assert loader.calls == ['rec']
